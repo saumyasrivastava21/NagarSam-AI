@@ -1,0 +1,15 @@
+{
+  "name": "nagarsam-ai-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "typecheck": "npm --prefix frontend run typecheck",
+    "lint": "npm --prefix frontend run lint",
+    "test": "npm --prefix frontend test"
+  },
+  "workspaces": [
+    "frontend"
+  ]
+}
