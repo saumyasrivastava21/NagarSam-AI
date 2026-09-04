@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --primary: 15 56 112;
+    --primary-foreground: 255 255 255;
+    --secondary: 13 118 110;
+    --secondary-foreground: 255 255 255;
+    --accent: 217 119 6;
+    --accent-foreground: 255 255 255;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased selection:bg-primary-600 selection:text-white;
+  }
+}
+
+/* Custom Scrollbar for dashboards & tables */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Leaflet Map overrides for clean civic style */
+.leaflet-container {
+  font-family: inherit;
+  z-index: 10;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 0.75rem;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 10px 25px -5px rgba(15, 56, 112, 0.15), 0 8px 10px -6px rgba(15, 56, 112, 0.1);
+  border: 1px solid #e2e8f0;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Custom pulse animations for detection bounding box & live indicators */
+@keyframes bboxPulse {
+  0%, 100% {
+    border-color: rgba(239, 68, 68, 0.9);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    border-color: rgba(239, 68, 68, 1);
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+}
+
+.animate-bbox {
+  animation: bboxPulse 2s infinite ease-in-out;
+}
