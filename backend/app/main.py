@@ -7,7 +7,7 @@ from backend.app.services.inference_service import inference_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f"[{settings.PROJECT_NAME}] Initializing AI Model from {settings.CHECKPOINT_PATH}...")
+    print(f"[{settings.PROJECT_NAME}] Initializing AI Model from {settings.MODEL_PATH}...")
     try:
         inference_service.load_model()
         print(f"[{settings.PROJECT_NAME}] Checkpoint loaded successfully with classes: {inference_service.class_names}")
