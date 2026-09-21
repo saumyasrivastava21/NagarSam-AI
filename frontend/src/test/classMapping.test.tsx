@@ -238,4 +238,47 @@ describe('NagarSam AI — Locked 5-Class Mapping & Detection Regression Tests', 
     expect(bboxElement?.style.width).toBe('50%');
     expect(bboxElement?.style.height).toBe('50%');
   });
+
+  // Test A: Category Independence (Citizen selects Longitudinal Crack, Model detects Pothole)
+  it('13. Test A — Category Independence: Citizen observation does NOT override or influence AI detections', () => {
+    const citizenSelectedCategory = 'longitudinal crack';
+    const modelDetectedOutput: RoadDefectDetection = {
+      model_version: 'RDD2022-YOLO11m-v1',
+      source: 'live',
+      detected: true,
+      confidence: 0.87,
+      primaryDefectClass: 'pothole',
+      primary_defect: 'pothole',
+      primary_confidence: 0.87,
+      detections: [
+        {
+          class: 'pothole',
+          class_id: 4,
+          class_name: 'pothole',
+          confidence: 0.87,
+          bbox: [150, 200, 550, 600],
+        },
+      ],
+      inference_time_ms: 82,
+      timestamp: new Date().toISOString(),
+      image_width: 800,
+      image_height: 600,
+    };
+
+    render(
+      <div>
+        <div data-testid="citizen-observation">Your reported issue: {formatDefectClass(citizenSelectedCategory)}</div>
+        <DetectionOverlay
+          imageUrl="https://images.unsplash.com/photo-1578983427937-26078ee3d9d3"
+          detection={modelDetectedOutput}
+        />
+      </div>
+    );
+
+    // Citizen observation is preserved as Longitudinal Crack
+    expect(screen.getByTestId('citizen-observation').textContent).toContain('Longitudinal Crack');
+    // AI overlay renders Pothole from the model output
+    expect(screen.getByText('Pothole')).toBeDefined();
+  });
 });
+

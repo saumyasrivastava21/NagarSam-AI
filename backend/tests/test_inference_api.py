@@ -13,7 +13,6 @@ client = TestClient(app)
 
 def create_synthetic_road_image(width=800, height=600, draw_defect=True) -> bytes:
     """Creates a synthetic road test image with texture and high contrast defect."""
-    # Gray asphalt background
     img = Image.new("RGB", (width, height), color=(60, 60, 65))
     draw = ImageDraw.Draw(img)
     
@@ -30,9 +29,10 @@ def create_synthetic_road_image(width=800, height=600, draw_defect=True) -> byte
 
 def test_checkpoint_exists_and_loads():
     """Verify that the YOLO checkpoint exists and loads successfully."""
-    assert os.path.exists(settings.CHECKPOINT_PATH), f"Checkpoint not found at {settings.CHECKPOINT_PATH}"
+    assert os.path.exists(settings.MODEL_PATH), f"Checkpoint not found at {settings.MODEL_PATH}"
     assert inference_service.model is not None
     assert len(inference_service.class_names) == 5
+    assert inference_service.is_ready is True
 
 def test_locked_five_class_mapping_order():
     """Verify that the 5 classes match the exact RDD2022 index order."""
@@ -51,14 +51,27 @@ def test_locked_five_class_mapping_order():
             f"Class ID {cls_id} mismatch: expected '{expected_name}', got '{actual[cls_id]}'"
         )
 
-def test_health_endpoint():
-    """Verify system health endpoint reports healthy status."""
+def test_system_health_endpoint():
+    """Verify /health reports healthy status."""
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "HEALTHY"
     assert data["model_loaded"] is True
     assert data["classes_count"] == 5
+
+def test_ai_health_and_readiness_endpoints():
+    """Verify /api/v1/ai/health and /api/v1/ai/ready endpoints."""
+    health_resp = client.get("/api/v1/ai/health")
+    assert health_resp.status_code == 200
+    assert health_resp.json()["status"] == "UP"
+    assert health_resp.json()["ready"] is True
+
+    ready_resp = client.get("/api/v1/ai/ready")
+    assert ready_resp.status_code == 200
+    assert ready_resp.json()["status"] == "READY"
+    assert ready_resp.json()["ready"] is True
+    assert ready_resp.json()["classes_count"] == 5
 
 def test_model_info_endpoint():
     """Verify /api/v1/ai/model-info returns complete checkpoint metadata."""
@@ -68,6 +81,7 @@ def test_model_info_endpoint():
     assert data["model_name"] == settings.MODEL_NAME
     assert data["classes_count"] == 5
     assert "0" in data["classes"] or 0 in data["classes"]
+    assert data["status"] == "READY"
 
 def test_classes_endpoint():
     """Verify /api/v1/ai/classes returns verified class dictionary."""
@@ -95,6 +109,7 @@ def test_detect_endpoint_with_image_upload():
     data = response.json()
     
     assert data["status"] == "completed"
+    assert data["source"] == "live"
     assert data["image"]["width"] == 800
     assert data["image"]["height"] == 600
     assert "inference_time_ms" in data
@@ -115,7 +130,6 @@ def test_detect_endpoint_with_image_upload():
 
 def test_detect_endpoint_empty_detection():
     """Verify that a clean image returns 0 detections without fake fallback."""
-    # Blank white image
     blank_img = Image.new("RGB", (640, 640), color=(255, 255, 255))
     buf = io.BytesIO()
     blank_img.save(buf, format="JPEG")
@@ -124,12 +138,23 @@ def test_detect_endpoint_empty_detection():
     response = client.post(
         "/api/v1/ai/detect",
         files=files,
-        data={"confidence_threshold": "0.50"}
+        data={"confidence_threshold": "0.60"}
     )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "completed"
     assert data["image"]["width"] == 640
     assert data["image"]["height"] == 640
-    # No fake fallback should be injected
     assert isinstance(data["detections"], list)
+
+def test_detect_endpoint_corrupted_file():
+    """Verify 400 Bad Request on corrupted image bytes."""
+    corrupt_bytes = b"NOT_A_VALID_IMAGE_FILE_BYTES_GARBAGE"
+    files = {"file": ("corrupt.jpg", corrupt_bytes, "image/jpeg")}
+    response = client.post("/api/v1/ai/detect", files=files)
+    assert response.status_code == 400
+
+def test_detect_endpoint_missing_file():
+    """Verify 400 Bad Request when no file or payload is provided."""
+    response = client.post("/api/v1/ai/detect")
+    assert response.status_code == 400

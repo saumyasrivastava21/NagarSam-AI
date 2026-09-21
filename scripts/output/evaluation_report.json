@@ -7,12 +7,12 @@
     "3": "other corruption",
     "4": "pothole"
   },
-  "average_latency_ms": 410.21,
+  "average_latency_ms": 279.78,
   "scenarios": [
     {
       "scenario": "Longitudinal Crack Test",
       "defect_type": "longitudinal",
-      "latency_ms": 824.03,
+      "latency_ms": 560.29,
       "detections_count": 2,
       "detections": [
         {
@@ -42,7 +42,7 @@
     {
       "scenario": "Transverse Crack Test",
       "defect_type": "transverse",
-      "latency_ms": 423.82,
+      "latency_ms": 239.14,
       "detections_count": 3,
       "detections": [
         {
@@ -83,7 +83,7 @@
     {
       "scenario": "Alligator Crack Test",
       "defect_type": "alligator",
-      "latency_ms": 317.49,
+      "latency_ms": 214.56,
       "detections_count": 2,
       "detections": [
         {
@@ -113,7 +113,7 @@
     {
       "scenario": "Other Corruption Test",
       "defect_type": "corruption",
-      "latency_ms": 307.69,
+      "latency_ms": 212.73,
       "detections_count": 3,
       "detections": [
         {
@@ -154,7 +154,7 @@
     {
       "scenario": "Pothole Cavity Test",
       "defect_type": "pothole",
-      "latency_ms": 336.02,
+      "latency_ms": 234.99,
       "detections_count": 2,
       "detections": [
         {
@@ -184,7 +184,7 @@
     {
       "scenario": "Multi-Defect Combination Test",
       "defect_type": "multi",
-      "latency_ms": 311.71,
+      "latency_ms": 272.19,
       "detections_count": 2,
       "detections": [
         {
@@ -214,7 +214,7 @@
     {
       "scenario": "Clean Road Surface Test",
       "defect_type": "clean",
-      "latency_ms": 350.72,
+      "latency_ms": 224.58,
       "detections_count": 2,
       "detections": [
         {
