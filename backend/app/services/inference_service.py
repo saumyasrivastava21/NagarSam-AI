@@ -135,9 +135,14 @@ class YOLOInferenceService:
                 primary_defect = sorted_by_conf[0].class_name
                 primary_confidence = sorted_by_conf[0].confidence
 
+        import uuid
+        req_id = f"req_{uuid.uuid4().hex[:12]}"
+
         return DetectionResponse(
+            request_id=req_id,
             model_name=settings.MODEL_NAME,
             model_version=settings.MODEL_VERSION,
+            source="live",
             status="completed",
             image=ImageMeta(width=width, height=height),
             inference_time_ms=inference_time_ms,

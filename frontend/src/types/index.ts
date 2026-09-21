@@ -89,8 +89,10 @@ export interface BoundingBox {
 }
 
 export interface RoadDefectDetection {
+  request_id?: string;
   model_version: string;
   model_name?: string;
+  source?: 'live' | 'mock';
   detected: boolean;
   confidence: number;
   primaryDefectClass?: string;

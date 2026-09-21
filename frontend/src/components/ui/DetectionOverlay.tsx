@@ -141,10 +141,16 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
           <div className="bg-slate-900/85 backdrop-blur-md border border-slate-700/80 text-white text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-md">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
             <span className="font-semibold text-slate-200">
-              {detection.model_version || 'RDD2022-YOLO11'}
+              {detection.model_version || (detection.isMock ? 'RDD2022-YOLO11m-demo' : 'RDD2022-YOLO11m-v1')}
             </span>
-            {detection.isMock && (
-              <span className="text-[10px] bg-slate-700 text-slate-300 px-1 rounded">Demo</span>
+            {detection.isMock || detection.source === 'mock' ? (
+              <span className="text-[10px] font-bold bg-amber-900/80 text-amber-300 border border-amber-600/50 px-1.5 py-0.2 rounded">
+                DEMO DATA
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold bg-emerald-900/80 text-emerald-300 border border-emerald-600/50 px-1.5 py-0.2 rounded">
+                LIVE
+              </span>
             )}
             <span className="text-slate-400">·</span>
             <span className="text-emerald-400 font-bold">

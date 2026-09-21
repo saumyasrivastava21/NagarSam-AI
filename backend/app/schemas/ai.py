@@ -12,8 +12,10 @@ class ImageMeta(BaseModel):
     height: int
 
 class DetectionResponse(BaseModel):
+    request_id: Optional[str] = None
     model_name: str
     model_version: str
+    source: str = "live"
     status: str
     image: ImageMeta
     inference_time_ms: float

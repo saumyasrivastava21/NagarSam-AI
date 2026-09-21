@@ -17,8 +17,10 @@ export interface BackendDetectionItem {
 }
 
 export interface BackendDetectionResponse {
+  request_id?: string;
   model_name: string;
   model_version: string;
+  source?: string;
   status: string;
   image: {
     width: number;
@@ -81,8 +83,10 @@ export class AIService {
       const overallConfidence = topDetection ? topDetection.confidence : 0;
 
       return {
+        request_id: data.request_id,
         model_name: data.model_name,
         model_version: data.model_version,
+        source: 'live',
         detected: detections.length > 0,
         confidence: overallConfidence,
         primaryDefectClass: primaryClass,

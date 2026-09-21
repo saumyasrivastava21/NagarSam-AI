@@ -1,8 +1,10 @@
-import { Report, ReportStatus, Severity, Priority } from '../../types';
+import { Report, ReportStatus, Severity, Priority, RoadDefectDetection } from '../../types';
 
 export interface CreateReportDTO {
   imageFile?: File;
   imageUrl?: string;
+  issueType?: string;
+  primaryDefect?: string;
   description: string;
   landmark?: string;
   latitude: number;
@@ -11,6 +13,7 @@ export interface CreateReportDTO {
   wardId?: string;
   citizenName?: string;
   citizenPhone?: string;
+  aiDetection?: RoadDefectDetection;
 }
 
 export interface ReportFilterParams {

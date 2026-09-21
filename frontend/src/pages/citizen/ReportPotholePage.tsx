@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useCreateReport } from '../../hooks/useReports';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -14,7 +14,7 @@ import { LocationPicker } from '../../components/forms/LocationPicker';
 import { VoiceInputButton } from '../../components/forms/VoiceInputButton';
 import { DetectionOverlay } from '../../components/ui/DetectionOverlay';
 import { WARDS_DATA, LUCKNOW_COORDINATES, ROAD_DEFECT_CLASSES } from '../../constants';
-import { formatDefectClass } from '../../utils/defectClasses';
+import { formatDefectClass, getDefectClassId } from '../../utils/defectClasses';
 import { aiService } from '../../services/api/ai.service';
 import { RoadDefectDetection } from '../../types';
 import {
@@ -26,6 +26,7 @@ import {
   ArrowLeft,
   Sparkles,
   RefreshCw,
+  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -36,6 +37,30 @@ const SAMPLE_ROAD_PHOTOS = [
   { label: 'Transverse Fissure', url: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&auto=format&fit=crop&q=80', defect: 'transverse crack' },
 ];
 
+export interface ReportDraftState {
+  image: {
+    file?: File;
+    previewUrl: string;
+    imageId: string;
+  };
+  location: {
+    latitude: number;
+    longitude: number;
+    wardId: string;
+    address: string;
+    landmark: string;
+  };
+  description: string;
+  observedCategory: string;
+  inference: {
+    status: 'idle' | 'loading' | 'completed' | 'failed';
+    source: 'mock' | 'live' | null;
+    imageId: string | null;
+    result: RoadDefectDetection | null;
+    error: string | null;
+  };
+}
+
 export const ReportPotholePage: React.FC = () => {
   const { t } = useTranslation();
   const { currentUser } = useAuthStore();
@@ -43,73 +68,113 @@ export const ReportPotholePage: React.FC = () => {
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
-  // Form State
-  const [imageUrl, setImageUrl] = useState<string>(SAMPLE_ROAD_PHOTOS[0].url);
-  const [imageFile, setImageFile] = useState<File | undefined>();
-  const [latitude, setLatitude] = useState<number>(LUCKNOW_COORDINATES.lat);
-  const [longitude, setLongitude] = useState<number>(LUCKNOW_COORDINATES.lng);
-  const [address, setAddress] = useState<string>('MG Marg, Hazratganj, Lucknow, UP');
-  const [wardId, setWardId] = useState<string>(WARDS_DATA[0].id);
-  const [issueCategory, setIssueCategory] = useState<string>('longitudinal crack');
-  const [description, setDescription] = useState<string>(
-    'Longitudinal road surface crack creating safety hazard for two-wheelers and traffic bottleneck during peak hours.'
-  );
-  const [landmark, setLandmark] = useState<string>('Opposite GPO crossing');
-
-  // AI Inference State
-  const [previewDetection, setPreviewDetection] = useState<RoadDefectDetection | undefined>();
-  const [isDetecting, setIsDetecting] = useState<boolean>(false);
+  // Single Source of Truth: Unified Report Draft State
+  const [draft, setDraft] = useState<ReportDraftState>(() => ({
+    image: {
+      previewUrl: SAMPLE_ROAD_PHOTOS[0].url,
+      imageId: `img_${Date.now()}_initial`,
+    },
+    location: {
+      latitude: LUCKNOW_COORDINATES.lat,
+      longitude: LUCKNOW_COORDINATES.lng,
+      wardId: WARDS_DATA[0].id,
+      address: 'MG Marg, Hazratganj, Lucknow, UP',
+      landmark: 'Opposite GPO crossing',
+    },
+    description: 'Longitudinal road surface crack creating safety hazard for two-wheelers and traffic bottleneck during peak hours.',
+    observedCategory: 'longitudinal crack',
+    inference: {
+      status: 'idle',
+      source: null,
+      imageId: null,
+      result: null,
+      error: null,
+    },
+  }));
 
   // Success State
   const [createdReportId, setCreatedReportId] = useState<string | null>(null);
 
   const isProductionApi = import.meta.env.VITE_API_MODE === 'production';
 
-  // Run or refresh AI detection
-  const runAIDetection = async (url: string, file?: File) => {
-    // Clear stale prediction immediately
-    setPreviewDetection(undefined);
+  // Run AI Inference with strict Image ID tracking
+  const runInferenceForImage = async (previewUrl: string, file: File | undefined, imageId: string, suggestedCategory?: string) => {
+    // 1. Immediately invalidate previous detections & set loading
+    setDraft((prev) => ({
+      ...prev,
+      inference: {
+        status: 'loading',
+        source: isProductionApi ? 'live' : 'mock',
+        imageId,
+        result: null,
+        error: null,
+      },
+    }));
 
     if (isProductionApi) {
-      setIsDetecting(true);
       try {
         const detection = await aiService.detectDefects({
           file,
-          image_url: !file ? url : undefined,
+          image_url: !file ? previewUrl : undefined,
           confidence_threshold: 0.25,
         });
-        setPreviewDetection(detection);
-        if (detection.primary_defect) {
-          setIssueCategory(detection.primary_defect);
-        }
-      } catch (err: any) {
-        setPreviewDetection({
-          model_version: 'RDD2022-YOLO11',
-          detected: false,
-          confidence: 0,
-          detections: [],
-          inference_time_ms: 0,
-          timestamp: new Date().toISOString(),
-          error: 'AI analysis is currently unavailable. Please retry.',
+
+        // 2. Ensure results are only accepted if imageId is still current
+        setDraft((prev) => {
+          if (prev.image.imageId !== imageId) {
+            return prev; // Stale response discarded
+          }
+          const primary = detection.primary_defect || detection.primaryDefectClass;
+          return {
+            ...prev,
+            observedCategory: primary || prev.observedCategory,
+            inference: {
+              status: 'completed',
+              source: 'live',
+              imageId,
+              result: detection,
+              error: null,
+            },
+          };
         });
-      } finally {
-        setIsDetecting(false);
+      } catch (err: any) {
+        setDraft((prev) => {
+          if (prev.image.imageId !== imageId) return prev;
+          return {
+            ...prev,
+            inference: {
+              status: 'failed',
+              source: 'live',
+              imageId,
+              result: null,
+              error: 'AI analysis is currently unavailable. Please retry or proceed with manual submission.',
+            },
+          };
+        });
       }
     } else {
-      // Mock mode: clear and generate accurate category preview
-      const targetClass = issueCategory || 'longitudinal crack';
-      setPreviewDetection({
-        model_version: 'RDD2022-YOLO11-demo',
+      // Mock Mode: Simulate realistic detection based on category
+      const targetClass = suggestedCategory || draft.observedCategory || 'longitudinal crack';
+      const classId = getDefectClassId(targetClass);
+      const simConfidence = 0.92;
+
+      const mockDetection: RoadDefectDetection = {
+        request_id: `mock_req_${Date.now()}`,
+        model_name: 'NagarSam Road Defect Detector',
+        model_version: 'RDD2022-YOLO11m-demo',
+        source: 'mock',
         detected: true,
-        confidence: 0.92,
+        pothole_detected: targetClass.toLowerCase().includes('pothole'),
+        confidence: simConfidence,
         primaryDefectClass: targetClass,
         primary_defect: targetClass,
-        primary_confidence: 0.92,
+        primary_confidence: simConfidence,
         detections: [
           {
             class: targetClass,
+            class_id: classId,
             class_name: targetClass,
-            confidence: 0.92,
+            confidence: simConfidence,
             bbox: [120, 180, 500, 480],
           },
         ],
@@ -118,30 +183,54 @@ export const ReportPotholePage: React.FC = () => {
         isMock: true,
         image_width: 800,
         image_height: 600,
-      });
+      };
+
+      setDraft((prev) => ({
+        ...prev,
+        observedCategory: targetClass,
+        inference: {
+          status: 'completed',
+          source: 'mock',
+          imageId,
+          result: mockDetection,
+          error: null,
+        },
+      }));
     }
   };
 
+  // Initial trigger on mount
+  useEffect(() => {
+    runInferenceForImage(draft.image.previewUrl, draft.image.file, draft.image.imageId, 'longitudinal crack');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handle Image Change & Discard Stale Predictions
   const handleImageChange = (url: string, file?: File, suggestedCategory?: string) => {
-    setImageUrl(url);
-    setImageFile(file);
-    if (suggestedCategory) {
-      setIssueCategory(suggestedCategory);
-    }
-    // Discard stale detections
-    runAIDetection(url, file);
+    const newImageId = `img_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setDraft((prev) => ({
+      ...prev,
+      image: {
+        file,
+        previewUrl: url,
+        imageId: newImageId,
+      },
+      observedCategory: suggestedCategory || prev.observedCategory,
+    }));
+
+    runInferenceForImage(url, file, newImageId, suggestedCategory);
   };
 
   const handleNext = () => {
-    if (step === 1 && !imageUrl) {
+    if (step === 1 && !draft.image.previewUrl) {
       toast.error('Please upload or select a road defect photograph.');
       return;
     }
-    if (step === 2 && (!latitude || !longitude)) {
+    if (step === 2 && (!draft.location.latitude || !draft.location.longitude)) {
       toast.error('Please pick or detect the road location.');
       return;
     }
-    if (step === 3 && description.trim().length < 10) {
+    if (step === 3 && draft.description.trim().length < 10) {
       toast.error('Please provide a descriptive explanation (min 10 characters).');
       return;
     }
@@ -152,29 +241,52 @@ export const ReportPotholePage: React.FC = () => {
     setStep((prev) => (prev - 1) as any);
   };
 
+  // Submit report using unified draft state
   const handleSubmit = async () => {
     try {
-      const selectedWard = WARDS_DATA.find((w) => w.id === wardId) || WARDS_DATA[0];
+      const selectedWard = WARDS_DATA.find((w) => w.id === draft.location.wardId) || WARDS_DATA[0];
+      
+      // Determine primary defect
+      const primaryDefect = draft.inference.result?.primary_defect 
+        || draft.inference.result?.primaryDefectClass 
+        || draft.observedCategory 
+        || 'longitudinal crack';
+
       const result = await createReportMutation.mutateAsync({
-        imageUrl,
-        imageFile,
-        latitude,
-        longitude,
-        address,
+        imageUrl: draft.image.previewUrl,
+        imageFile: draft.image.file,
+        latitude: draft.location.latitude,
+        longitude: draft.location.longitude,
+        address: draft.location.address,
         wardId: selectedWard.id,
-        description,
-        landmark,
+        description: draft.description,
+        landmark: draft.location.landmark,
+        issueType: primaryDefect,
+        primaryDefect,
+        aiDetection: draft.inference.result || undefined,
         citizenName: currentUser?.name || 'Citizen Reporter',
         citizenPhone: currentUser?.phone || '+91 98765 43210',
       });
 
       setCreatedReportId(result.id);
-      toast.success(`Report ${result.id} submitted! AI inference completed.`);
+      toast.success(`Report ${result.id} submitted for municipal triage!`);
     } catch {
       toast.error('Failed to submit report. Please try again.');
     }
   };
 
+  // Derive primary defect and defect list for Review Screen
+  const inferenceResult = draft.inference.result;
+  const detectionsList = inferenceResult?.detections || [];
+  
+  const primaryDefectName = inferenceResult?.primary_defect 
+    || inferenceResult?.primaryDefectClass 
+    || (detectionsList.length > 0 ? detectionsList[0].class : null);
+
+  const primaryConfidence = inferenceResult?.primary_confidence 
+    || (detectionsList.length > 0 ? detectionsList[0].confidence : null);
+
+  // Success View
   if (createdReportId) {
     return (
       <div className="max-w-xl mx-auto py-8 text-center space-y-6">
@@ -187,7 +299,7 @@ export const ReportPotholePage: React.FC = () => {
             {t('reportSubmittedSuccess')}
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            {t('brandTaglinePrimary')}
+            Your road defect report has been registered and routed to the municipal officer triage queue.
           </p>
         </div>
 
@@ -203,12 +315,15 @@ export const ReportPotholePage: React.FC = () => {
           </div>
 
           <div className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
-            <div><strong>Location:</strong> {address}</div>
-            <div><strong>Category:</strong> <span className="capitalize">{formatDefectClass(issueCategory)}</span></div>
-            <div><strong>Description:</strong> {description}</div>
+            <div><strong>Location:</strong> {draft.location.address}</div>
+            <div><strong>Primary Defect:</strong> <span className="font-semibold text-primary-700 dark:text-primary-400">{formatDefectClass(primaryDefectName || draft.observedCategory)}</span></div>
+            <div><strong>Description:</strong> {draft.description}</div>
             <div className="pt-2 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>RDD2022 AI road defect analysis completed ({formatDefectClass(issueCategory)})</span>
+              <span>
+                {draft.inference.source === 'live' ? 'YOLO11m Verified Inference' : 'Demo Simulation'} ({formatDefectClass(primaryDefectName || draft.observedCategory)}
+                {primaryConfidence ? ` — ${(primaryConfidence * 100).toFixed(0)}%` : ''})
+              </span>
             </div>
           </div>
         </Card>
@@ -280,7 +395,7 @@ export const ReportPotholePage: React.FC = () => {
         ))}
       </div>
 
-      {/* Step Content */}
+      {/* Step Content Card */}
       <Card className="p-6 sm:p-8 shadow-civic space-y-6">
         {/* STEP 1: Upload Photo */}
         {step === 1 && (
@@ -293,7 +408,7 @@ export const ReportPotholePage: React.FC = () => {
             </div>
 
             <FileUploader
-              value={imageUrl}
+              value={draft.image.previewUrl}
               onChange={(url, file) => handleImageChange(url, file)}
             />
 
@@ -309,7 +424,7 @@ export const ReportPotholePage: React.FC = () => {
                     type="button"
                     onClick={() => handleImageChange(p.url, undefined, p.defect)}
                     className={`relative rounded-xl overflow-hidden border p-1 text-left transition ${
-                      imageUrl === p.url ? 'border-primary-600 ring-2 ring-primary-200 dark:ring-primary-900' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                      draft.image.previewUrl === p.url ? 'border-primary-600 ring-2 ring-primary-200 dark:ring-primary-900' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
                     }`}
                   >
                     <img src={p.url} alt={p.label} className="w-full h-16 object-cover rounded-lg" />
@@ -321,8 +436,8 @@ export const ReportPotholePage: React.FC = () => {
               </div>
             </div>
 
-            {/* Live AI Overlay Preview if available */}
-            {imageUrl && (
+            {/* Live AI Overlay Preview */}
+            {draft.image.previewUrl && (
               <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
@@ -334,17 +449,18 @@ export const ReportPotholePage: React.FC = () => {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => runAIDetection(imageUrl, imageFile)}
-                      isLoading={isDetecting}
+                      onClick={() => runInferenceForImage(draft.image.previewUrl, draft.image.file, draft.image.imageId)}
+                      isLoading={draft.inference.status === 'loading'}
                       leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
                     >
                       Retry Analysis
                     </Button>
                   )}
                 </div>
+
                 <DetectionOverlay
-                  imageUrl={imageUrl}
-                  detection={previewDetection}
+                  imageUrl={draft.image.previewUrl}
+                  detection={draft.inference.result || undefined}
                   className="max-h-72"
                 />
               </div>
@@ -358,18 +474,24 @@ export const ReportPotholePage: React.FC = () => {
             <div className="space-y-1">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Step 2: Road Geolocation</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Pin the exact road coordinates so field operations can navigate directly to the defect.
+                Pin the exact road coordinates so municipal inspection crews can navigate directly to the site.
               </p>
             </div>
 
             <LocationPicker
-              latitude={latitude}
-              longitude={longitude}
-              address={address}
+              latitude={draft.location.latitude}
+              longitude={draft.location.longitude}
+              address={draft.location.address}
               onChange={(lat, lng, addr) => {
-                setLatitude(lat);
-                setLongitude(lng);
-                setAddress(addr);
+                setDraft((prev) => ({
+                  ...prev,
+                  location: {
+                    ...prev.location,
+                    latitude: lat,
+                    longitude: lng,
+                    address: addr,
+                  },
+                }));
               }}
             />
 
@@ -377,37 +499,49 @@ export const ReportPotholePage: React.FC = () => {
               <Select
                 label="Municipal Ward"
                 options={WARDS_DATA.map((w) => ({ value: w.id, label: `${w.name} (${w.zone})` }))}
-                value={wardId}
-                onChange={(e) => setWardId(e.target.value)}
+                value={draft.location.wardId}
+                onChange={(e) => setDraft((prev) => ({
+                  ...prev,
+                  location: { ...prev.location, wardId: e.target.value }
+                }))}
               />
               <Input
                 label="Street / Landmark Address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                value={draft.location.address}
+                onChange={(e) => setDraft((prev) => ({
+                  ...prev,
+                  location: { ...prev.location, address: e.target.value }
+                }))}
                 placeholder="MG Marg, Hazratganj"
               />
             </div>
           </div>
         )}
 
-        {/* STEP 3: Description, Category & Landmark with Voice Input */}
+        {/* STEP 3: Description, Category & Landmark */}
         {step === 3 && (
           <div className="space-y-5 animate-in fade-in duration-150">
             <div className="space-y-1">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Step 3: Defect Description & Context</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Provide brief context or use your voice to assist municipal officers in priority assessment.
+                Provide brief context or use voice dictation to assist municipal officers during incident triage.
               </p>
             </div>
 
-            {/* Optional Defect Category */}
+            {/* Observed Category Selector */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Observed Defect Category (Optional — AI will also detect automatically)
+                Observed Defect Category (AI will also auto-detect from image)
               </label>
               <select
-                value={issueCategory}
-                onChange={(e) => setIssueCategory(e.target.value)}
+                value={draft.observedCategory}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDraft((prev) => ({ ...prev, observedCategory: val }));
+                  if (!isProductionApi) {
+                    runInferenceForImage(draft.image.previewUrl, draft.image.file, draft.image.imageId, val);
+                  }
+                }}
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 {ROAD_DEFECT_CLASSES.map((cls) => (
@@ -418,80 +552,178 @@ export const ReportPotholePage: React.FC = () => {
               </select>
             </div>
 
-            {/* Description with Voice Input Button */}
+            {/* Description */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Description of Road Defect <span className="text-red-500">*</span>
                 </label>
                 <VoiceInputButton
-                  onTranscript={(text) => setDescription((prev) => (prev ? `${prev} ${text}` : text))}
+                  onTranscript={(text) => setDraft((prev) => ({
+                    ...prev,
+                    description: prev.description ? `${prev.description} ${text}` : text
+                  }))}
                   className="scale-90"
                 />
               </div>
               <Textarea
                 rows={4}
                 required
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                value={draft.description}
+                onChange={(e) => setDraft((prev) => ({ ...prev, description: e.target.value }))}
                 placeholder="Describe road condition, depth, hazard to two-wheelers, or traffic bottleneck..."
-                helperText="Min 10 characters required. You can type or use the microphone button above to speak."
+                helperText="Min 10 characters required. You can type or use the microphone button to dictate."
               />
             </div>
 
-            {/* Landmark with Voice Input */}
+            {/* Landmark */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Prominent Nearby Landmark (Optional)
                 </label>
                 <VoiceInputButton
-                  onTranscript={(text) => setLandmark(text)}
+                  onTranscript={(text) => setDraft((prev) => ({
+                    ...prev,
+                    location: { ...prev.location, landmark: text }
+                  }))}
                   className="scale-90"
                 />
               </div>
               <Input
-                value={landmark}
-                onChange={(e) => setLandmark(e.target.value)}
+                value={draft.location.landmark}
+                onChange={(e) => setDraft((prev) => ({
+                  ...prev,
+                  location: { ...prev.location, landmark: e.target.value }
+                }))}
                 placeholder="e.g. Opposite GPO building, near Metro Pillar 42"
               />
             </div>
           </div>
         )}
 
-        {/* STEP 4: Review & Submit */}
+        {/* STEP 4: Redesigned Review Report Summary (Bug Fixes A, B, C, D, E, F, G) */}
         {step === 4 && (
-          <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="space-y-6 animate-in fade-in duration-150">
             <div className="space-y-1">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Step 4: Review Report Summary</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Step 4: Review Report Summary</h3>
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                  Ready for your review
+                </span>
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Verify all details before submitting for automated AI detection and municipal dispatch.
+                Verify defect classification and location details before submitting to municipal officer triage.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-900 max-h-48">
+            {/* Section A: Photographic Evidence & Detection Overlay */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                A. Photographic Evidence & Visual Defect Localization
+              </span>
+              <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-950 max-h-72">
                 <DetectionOverlay
-                  imageUrl={imageUrl}
-                  detection={previewDetection}
+                  imageUrl={draft.image.previewUrl}
+                  detection={draft.inference.result || undefined}
                   className="w-full h-full object-cover"
                 />
               </div>
-              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs text-slate-700 dark:text-slate-300">
-                <div><strong>Ward:</strong> {WARDS_DATA.find((w) => w.id === wardId)?.name}</div>
-                <div><strong>Category:</strong> <span className="capitalize">{formatDefectClass(issueCategory)}</span></div>
-                <div><strong>Location:</strong> {address}</div>
-                <div><strong>Coordinates:</strong> {latitude.toFixed(5)}, {longitude.toFixed(5)}</div>
-                <div><strong>Landmark:</strong> {landmark || 'N/A'}</div>
-                <div><strong>Description:</strong> {description}</div>
-              </div>
             </div>
 
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>
-                Upon submission, the RDD2022 YOLO11 model will analyze the image in real-time.
+            {/* Section B & C: AI Detection Summary & Derived Primary Defect */}
+            <Card className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary-600" />
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    B. AI Detection Summary & Model Metadata
+                  </span>
+                </div>
+                {/* Source Badge (Bug B Fix: Live vs Demo) */}
+                {draft.inference.source === 'live' ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                    LIVE INFERENCE (YOLO11m)
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                    DEMO DATA (SIMULATED)
+                  </span>
+                )}
+              </div>
+
+              {/* Detections List & Primary Defect (Bug A & D Fix) */}
+              <div className="space-y-2 text-xs text-slate-700 dark:text-slate-300">
+                {detectionsList.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <strong className="text-slate-900 dark:text-slate-100">Primary Detected Defect:</strong>
+                      <span className="px-2 py-0.5 rounded font-bold bg-primary-100 dark:bg-primary-950 text-primary-800 dark:text-primary-300 border border-primary-200 dark:border-primary-800">
+                        {formatDefectClass(primaryDefectName)}
+                      </span>
+                      {primaryConfidence !== null && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                          ({(primaryConfidence * 100).toFixed(0)}% Confidence)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="pt-1">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                        All Identified Defects ({detectionsList.length}):
+                      </span>
+                      <ul className="mt-1 space-y-1 pl-3 list-disc">
+                        {detectionsList.map((d, i) => (
+                          <li key={i} className="text-xs">
+                            <span className="font-semibold">{formatDefectClass(d.class_name || d.class)}</span> — {(d.confidence * 100).toFixed(0)}% Confidence
+                            {d.class_id !== undefined && <span className="text-slate-400 text-[10px] ml-1.5">(Class ID {d.class_id})</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-2 text-slate-500 dark:text-slate-400 italic flex items-center gap-2">
+                    <Info className="w-4 h-4 text-slate-400" />
+                    <span>No road defects were detected in this image.</span>
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  <div><strong>Model:</strong> {inferenceResult?.model_name || 'NagarSam Road Defect Detector'}</div>
+                  <div><strong>Version:</strong> {inferenceResult?.model_version || (draft.inference.source === 'live' ? 'RDD2022-YOLO11m-v1' : 'RDD2022-YOLO11m-demo')}</div>
+                  <div><strong>Latency:</strong> {inferenceResult?.inference_time_ms ? `${inferenceResult.inference_time_ms} ms` : 'N/A'}</div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Section D: Report Details (Bug G Fix) */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs text-slate-700 dark:text-slate-300">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                D. Citizen Report Details
               </span>
+              <div><strong>Ward:</strong> {WARDS_DATA.find((w) => w.id === draft.location.wardId)?.name}</div>
+              {/* Category is strictly derived from Primary Defect */}
+              <div><strong>Category:</strong> <span className="font-bold text-slate-900 dark:text-slate-100">{formatDefectClass(primaryDefectName || draft.observedCategory)}</span></div>
+              <div><strong>Location:</strong> {draft.location.address}</div>
+              <div><strong>Coordinates:</strong> {draft.location.latitude.toFixed(5)}, {draft.location.longitude.toFixed(5)}</div>
+              <div><strong>Landmark:</strong> {draft.location.landmark || 'N/A'}</div>
+              <div><strong>Description:</strong> {draft.description}</div>
+            </div>
+
+            {/* Section E: Truthful Operational Status (Bug C & E Fix) */}
+            <div className="p-3 bg-blue-50 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-800 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-bold">
+                  {draft.inference.source === 'live'
+                    ? 'AI analysis complete. Review the detected road defects before submitting.'
+                    : 'Demo analysis complete. Results are simulated for demonstration purposes.'}
+                </p>
+                <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                  Submitting this report routes your photographic evidence to the municipal officer triage queue for review, field worker dispatch, and work order tracking.
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -531,7 +763,7 @@ export const ReportPotholePage: React.FC = () => {
               isLoading={createReportMutation.isPending}
               leftIcon={<CheckCircle2 className="w-4 h-4" />}
             >
-              {t('submitReport')}
+              Submit Report for Officer Triage
             </Button>
           )}
         </div>

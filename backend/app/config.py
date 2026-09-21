@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "NagarSam AI"
     API_V1_PREFIX: str = "/api/v1"
     MODEL_NAME: str = "NagarSam Road Defect Detector"
-    MODEL_VERSION: str = "RDD2022-YOLO11-v1"
+    MODEL_VERSION: str = "RDD2022-YOLO11m-v1"
     CHECKPOINT_PATH: str = os.getenv(
         "NAGARSAM_CHECKPOINT_PATH",
         os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "models", "nagrik OS initial.pt")

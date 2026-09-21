@@ -55,12 +55,14 @@ describe('NagarSam AI — Locked 5-Class Mapping & Detection Regression Tests', 
     });
   });
 
-  it('7. Frontend renders the exact API class name without remapping to Pothole', () => {
+  it('7. Frontend renders the exact API class name without remapping to Pothole (Bug A Fix)', () => {
     const mockDetection: RoadDefectDetection = {
-      model_version: 'RDD2022-YOLO11',
+      model_version: 'RDD2022-YOLO11m-v1',
+      source: 'live',
       detected: true,
       confidence: 0.91,
       primaryDefectClass: 'transverse crack',
+      primary_defect: 'transverse crack',
       detections: [
         {
           class: 'transverse crack',
@@ -88,11 +90,13 @@ describe('NagarSam AI — Locked 5-Class Mapping & Detection Regression Tests', 
     expect(screen.queryByText('Pothole')).toBeNull();
   });
 
-  it('8. Multiple detections render independently with separate classes', () => {
+  it('8. Multiple detections render independently with separate classes (Bug D Fix)', () => {
     const mockMultiDetection: RoadDefectDetection = {
-      model_version: 'RDD2022-YOLO11',
+      model_version: 'RDD2022-YOLO11m-v1',
+      source: 'live',
       detected: true,
       confidence: 0.94,
+      primary_defect: 'longitudinal crack',
       detections: [
         {
           class: 'longitudinal crack',
@@ -127,7 +131,8 @@ describe('NagarSam AI — Locked 5-Class Mapping & Detection Regression Tests', 
 
   it('9. Empty detections show clean empty state without fallback boxes', () => {
     const emptyDetection: RoadDefectDetection = {
-      model_version: 'RDD2022-YOLO11',
+      model_version: 'RDD2022-YOLO11m-v1',
+      source: 'live',
       detected: false,
       confidence: 0,
       detections: [],
@@ -150,7 +155,8 @@ describe('NagarSam AI — Locked 5-Class Mapping & Detection Regression Tests', 
 
   it('10. Production error state displays retry notice without fake fallback detections', () => {
     const errorDetection: RoadDefectDetection = {
-      model_version: 'RDD2022-YOLO11',
+      model_version: 'RDD2022-YOLO11m-v1',
+      source: 'live',
       detected: false,
       confidence: 0,
       detections: [],
@@ -170,9 +176,38 @@ describe('NagarSam AI — Locked 5-Class Mapping & Detection Regression Tests', 
     expect(screen.queryByText('Pothole')).toBeNull();
   });
 
-  it('11. Bounding boxes align within 0-100% of image dimensions', () => {
+  it('11. Distinguishes DEMO DATA badge from LIVE INFERENCE (Bug B Fix)', () => {
+    const mockDetection: RoadDefectDetection = {
+      model_version: 'RDD2022-YOLO11m-demo',
+      source: 'mock',
+      isMock: true,
+      detected: true,
+      confidence: 0.92,
+      detections: [
+        {
+          class: 'longitudinal crack',
+          confidence: 0.92,
+          bbox: [100, 100, 400, 400],
+        },
+      ],
+      inference_time_ms: 78,
+      timestamp: new Date().toISOString(),
+    };
+
+    render(
+      <DetectionOverlay
+        imageUrl="https://images.unsplash.com/photo-1515162816999-a0c47dc192f7"
+        detection={mockDetection}
+      />
+    );
+
+    expect(screen.getByText('DEMO DATA')).toBeDefined();
+  });
+
+  it('12. Bounding boxes align within 0-100% of image dimensions', () => {
     const detectionWithBbox: RoadDefectDetection = {
-      model_version: 'RDD2022-YOLO11',
+      model_version: 'RDD2022-YOLO11m-v1',
+      source: 'live',
       detected: true,
       confidence: 0.85,
       detections: [
@@ -198,7 +233,6 @@ describe('NagarSam AI — Locked 5-Class Mapping & Detection Regression Tests', 
 
     const bboxElement = container.querySelector('.animate-bbox') as HTMLElement;
     expect(bboxElement).toBeDefined();
-    // left: 200/800 = 25%, top: 150/600 = 25%
     expect(bboxElement?.style.left).toBe('25%');
     expect(bboxElement?.style.top).toBe('25%');
     expect(bboxElement?.style.width).toBe('50%');

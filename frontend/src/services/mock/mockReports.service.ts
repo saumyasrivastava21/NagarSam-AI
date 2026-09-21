@@ -4,7 +4,7 @@ import {
   ReportFilterParams,
   PaginatedResult,
 } from '../contracts/reports.contract';
-import { Report, ReportStatus, Severity, Priority } from '../../types';
+import { Report, ReportStatus, Severity, Priority, RoadDefectDetection } from '../../types';
 import { mockStore } from './mockStore';
 import { calculateDistanceKm } from '../../utils/geo';
 import { WARDS_DATA, DEPARTMENTS_DATA } from '../../constants';
@@ -78,31 +78,66 @@ export class MockReportsService implements IReportsService {
     const fallbackImageUrl = 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=800&auto=format&fit=crop&q=80';
     const imageUrl = dto.imageUrl || fallbackImageUrl;
 
-    // Detect target class from description / landmark / category
-    const descLower = (dto.description + ' ' + (dto.landmark || '')).toLowerCase();
-    let targetClass = 'longitudinal crack';
-    let targetClassId = 0;
-    let bbox: [number, number, number, number] = [120, 180, 500, 480];
+    // Use draft AI detection if provided, otherwise simulate based on category
+    let aiDetection: RoadDefectDetection;
+    let targetClass = dto.issueType || dto.primaryDefect || 'longitudinal crack';
 
-    if (descLower.includes('pothole') || descLower.includes('cavity')) {
-      targetClass = 'pothole';
-      targetClassId = 4;
-      bbox = [140, 200, 520, 610];
-    } else if (descLower.includes('transverse')) {
-      targetClass = 'transverse crack';
-      targetClassId = 1;
-      bbox = [100, 250, 700, 380];
-    } else if (descLower.includes('alligator') || descLower.includes('fatigue')) {
-      targetClass = 'alligator crack';
-      targetClassId = 2;
-      bbox = [150, 160, 580, 520];
-    } else if (descLower.includes('corruption') || descLower.includes('erosion') || descLower.includes('subsidence')) {
-      targetClass = 'other corruption';
-      targetClassId = 3;
-      bbox = [180, 220, 620, 540];
+    if (dto.aiDetection) {
+      aiDetection = dto.aiDetection;
+      targetClass = dto.aiDetection.primary_defect || dto.aiDetection.primaryDefectClass || targetClass;
+    } else {
+      // Detect target class from description / landmark / category
+      const descLower = (dto.description + ' ' + (dto.landmark || '')).toLowerCase();
+      let targetClassId = 0;
+      let bbox: [number, number, number, number] = [120, 180, 500, 480];
+
+      if (descLower.includes('pothole') || descLower.includes('cavity')) {
+        targetClass = 'pothole';
+        targetClassId = 4;
+        bbox = [140, 200, 520, 610];
+      } else if (descLower.includes('transverse')) {
+        targetClass = 'transverse crack';
+        targetClassId = 1;
+        bbox = [100, 250, 700, 380];
+      } else if (descLower.includes('alligator') || descLower.includes('fatigue')) {
+        targetClass = 'alligator crack';
+        targetClassId = 2;
+        bbox = [150, 160, 580, 520];
+      } else if (descLower.includes('corruption') || descLower.includes('erosion') || descLower.includes('subsidence')) {
+        targetClass = 'other corruption';
+        targetClassId = 3;
+        bbox = [180, 220, 620, 540];
+      }
+
+      const simConfidence = 0.92;
+      aiDetection = {
+        model_name: 'NagarSam Road Defect Detector',
+        model_version: 'RDD2022-YOLO11m-demo',
+        source: 'mock',
+        detected: true,
+        pothole_detected: targetClass === 'pothole',
+        confidence: simConfidence,
+        primaryDefectClass: targetClass,
+        primary_defect: targetClass,
+        primary_confidence: simConfidence,
+        detections: [
+          {
+            class: targetClass,
+            class_id: targetClassId,
+            class_name: targetClass,
+            confidence: simConfidence,
+            bbox,
+          },
+        ],
+        inference_time_ms: 78,
+        timestamp: new Date().toISOString(),
+        isMock: true,
+        image_width: 800,
+        image_height: 600,
+      };
     }
 
-    const confidence = 0.92;
+    const confidence = aiDetection.confidence || 0.92;
     const severity: Severity = targetClass === 'pothole' ? 'CRITICAL' : targetClass === 'alligator crack' ? 'HIGH' : 'MEDIUM';
     const priority: Priority = severity === 'CRITICAL' ? 'CRITICAL' : severity === 'HIGH' ? 'HIGH' : 'MEDIUM';
 
@@ -126,34 +161,12 @@ export class MockReportsService implements IReportsService {
       priority,
       departmentId: dept.id,
       departmentName: dept.name,
-      aiDetection: {
-        model_version: 'RDD2022-YOLO11-demo',
-        detected: true,
-        pothole_detected: targetClass === 'pothole',
-        confidence,
-        primaryDefectClass: targetClass,
-        primary_defect: targetClass,
-        primary_confidence: confidence,
-        detections: [
-          {
-            class: targetClass,
-            class_id: targetClassId,
-            class_name: targetClass,
-            confidence,
-            bbox,
-          },
-        ],
-        inference_time_ms: 78,
-        timestamp: new Date().toISOString(),
-        isMock: true,
-        image_width: 800,
-        image_height: 600,
-      },
+      aiDetection,
       aiPriorityReasoning: {
         recommendation: priority,
-        confidenceScore: 91,
+        confidenceScore: Math.round(confidence * 100),
         factors: [
-          `RDD2022 visual confidence (92%) for ${targetClass}`,
+          `RDD2022 visual confidence (${(confidence * 100).toFixed(0)}%) for ${targetClass}`,
           'Road fissure surface area threshold analyzed',
           'Corridor transit density evaluated',
         ],
@@ -173,9 +186,9 @@ export class MockReportsService implements IReportsService {
         {
           id: `TL-${Date.now()}-2`,
           status: 'UNDER_REVIEW',
-          title: 'AI Defect Analysis Complete',
-          description: `RDD2022 confirmed ${targetClass} detection with 92% confidence (Simulation Mode).`,
-          actor: 'RDD2022 AI Engine',
+          title: 'AI Defect Analysis Logged',
+          description: `Defect verified as ${targetClass} (${(confidence * 100).toFixed(0)}% confidence).`,
+          actor: aiDetection.model_name || 'RDD2022 AI Engine',
           actorRole: 'ADMIN',
           timestamp: new Date(Date.now() + 1000).toISOString(),
         },
