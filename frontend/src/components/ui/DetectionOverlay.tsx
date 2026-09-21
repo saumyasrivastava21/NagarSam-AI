@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { RoadDefectDetection } from '../../types';
-import { Sparkles, Eye, EyeOff } from 'lucide-react';
+import { Sparkles, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { formatDefectClass } from '../../utils/defectClasses';
 
 export interface DetectionOverlayProps {
   imageUrl: string;
@@ -64,7 +65,10 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
   showToggle = true,
 }) => {
   const [showBoxes, setShowBoxes] = useState(true);
-  const isDetected = detection ? (detection.detected ?? detection.pothole_detected) : false;
+  const isDetected = detection ? (detection.detected ?? (detection.detections && detection.detections.length > 0)) : false;
+
+  const imgRefWidth = detection?.image_width || 800;
+  const imgRefHeight = detection?.image_height || 600;
 
   return (
     <div className={cn('relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-950 group select-none', className)}>
@@ -74,28 +78,37 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
         className="w-full h-full object-cover max-h-[450px] transition-transform duration-300"
       />
 
+      {/* Error state if inference failed in production mode */}
+      {detection?.error && (
+        <div className="absolute inset-x-0 bottom-0 bg-red-900/90 backdrop-blur-md p-3 text-white text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-300 shrink-0" />
+          <span>{detection.error}</span>
+        </div>
+      )}
+
       {/* Bounding Boxes Layer */}
-      {showBoxes && detection && isDetected && (
+      {showBoxes && detection && isDetected && !detection.error && (
         <div className="absolute inset-0 pointer-events-none" aria-label="AI defect bounding boxes overlay">
           {detection.detections.map((d, index) => {
-            const classKey = d.class.toLowerCase();
+            const classKey = (d.class_name || d.class || '').toLowerCase();
             const colorTheme = DEFECT_COLOR_MAP[classKey] || DEFAULT_COLOR;
+            const displayLabel = formatDefectClass(d.class_name || d.class);
 
-            // Normalize bbox coordinates (assuming 800x600 coordinate reference space)
+            // Compute percentage coordinates relative to original image dimensions
             const [x1, y1, x2, y2] = d.bbox;
-            const leftPct = (x1 / 800) * 100;
-            const topPct = (y1 / 600) * 100;
-            const widthPct = ((x2 - x1) / 800) * 100;
-            const heightPct = ((y2 - y1) / 600) * 100;
+            const leftPct = Math.max(0, Math.min(100, (x1 / imgRefWidth) * 100));
+            const topPct = Math.max(0, Math.min(100, (y1 / imgRefHeight) * 100));
+            const widthPct = Math.max(2, Math.min(100 - leftPct, ((x2 - x1) / imgRefWidth) * 100));
+            const heightPct = Math.max(2, Math.min(100 - topPct, ((y2 - y1) / imgRefHeight) * 100));
 
             return (
               <div
                 key={index}
                 style={{
-                  left: `${Math.max(5, Math.min(leftPct, 80))}%`,
-                  top: `${Math.max(5, Math.min(topPct, 75))}%`,
-                  width: `${Math.max(20, Math.min(widthPct, 60))}%`,
-                  height: `${Math.max(20, Math.min(heightPct, 50))}%`,
+                  left: `${leftPct}%`,
+                  top: `${topPct}%`,
+                  width: `${widthPct}%`,
+                  height: `${heightPct}%`,
                 }}
                 className={cn(
                   'absolute border-2 rounded-md animate-bbox shadow-lg',
@@ -111,7 +124,7 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
                     colorTheme.pill
                   )}
                 >
-                  <span className="capitalize tracking-wide">{d.class}</span>
+                  <span className="tracking-wide">{displayLabel}</span>
                   <span className={cn('px-1 py-0.2 rounded text-[10px]', colorTheme.badge)}>
                     {(d.confidence * 100).toFixed(0)}%
                   </span>
@@ -123,11 +136,16 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
       )}
 
       {/* Model Info Badge Overlay */}
-      {detection && (
+      {detection && !detection.error && (
         <div className="absolute top-3 left-3 flex flex-wrap items-center gap-2">
           <div className="bg-slate-900/85 backdrop-blur-md border border-slate-700/80 text-white text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-md">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span className="font-semibold text-slate-200">{detection.model_version || 'RDD2022-v1'}</span>
+            <span className="font-semibold text-slate-200">
+              {detection.model_version || 'RDD2022-YOLO11'}
+            </span>
+            {detection.isMock && (
+              <span className="text-[10px] bg-slate-700 text-slate-300 px-1 rounded">Demo</span>
+            )}
             <span className="text-slate-400">·</span>
             <span className="text-emerald-400 font-bold">
               {(detection.confidence * 100).toFixed(0)}% Conf.
@@ -147,7 +165,7 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
       )}
 
       {/* Toggle Bounding Box Button */}
-      {showToggle && detection && (
+      {showToggle && detection && isDetected && !detection.error && (
         <button
           type="button"
           onClick={() => setShowBoxes(!showBoxes)}

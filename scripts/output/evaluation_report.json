@@ -1,0 +1,245 @@
+{
+  "model_path": "models/nagrik OS initial.pt",
+  "model_classes": {
+    "0": "longitudinal crack",
+    "1": "transverse crack",
+    "2": "alligator crack",
+    "3": "other corruption",
+    "4": "pothole"
+  },
+  "average_latency_ms": 410.21,
+  "scenarios": [
+    {
+      "scenario": "Longitudinal Crack Test",
+      "defect_type": "longitudinal",
+      "latency_ms": 824.03,
+      "detections_count": 2,
+      "detections": [
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.31,
+          "bbox": [
+            379.6,
+            5.2,
+            428.0,
+            595.4
+          ]
+        },
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.254,
+          "bbox": [
+            383.5,
+            220.1,
+            416.8,
+            600.0
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "Transverse Crack Test",
+      "defect_type": "transverse",
+      "latency_ms": 423.82,
+      "detections_count": 3,
+      "detections": [
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.458,
+          "bbox": [
+            383.1,
+            0.0,
+            419.3,
+            302.7
+          ]
+        },
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.43,
+          "bbox": [
+            383.7,
+            295.6,
+            418.1,
+            600.0
+          ]
+        },
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.168,
+          "bbox": [
+            367.7,
+            1.6,
+            424.7,
+            600.0
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "Alligator Crack Test",
+      "defect_type": "alligator",
+      "latency_ms": 317.49,
+      "detections_count": 2,
+      "detections": [
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.417,
+          "bbox": [
+            389.2,
+            1.2,
+            417.8,
+            178.2
+          ]
+        },
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.312,
+          "bbox": [
+            389.0,
+            419.7,
+            417.4,
+            598.7
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "Other Corruption Test",
+      "defect_type": "corruption",
+      "latency_ms": 307.69,
+      "detections_count": 3,
+      "detections": [
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.598,
+          "bbox": [
+            388.9,
+            460.5,
+            414.7,
+            600.0
+          ]
+        },
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.516,
+          "bbox": [
+            382.5,
+            0.0,
+            419.5,
+            280.3
+          ]
+        },
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.233,
+          "bbox": [
+            382.6,
+            460.6,
+            419.8,
+            599.4
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "Pothole Cavity Test",
+      "defect_type": "pothole",
+      "latency_ms": 336.02,
+      "detections_count": 2,
+      "detections": [
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.516,
+          "bbox": [
+            389.1,
+            0.0,
+            418.5,
+            218.4
+          ]
+        },
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.466,
+          "bbox": [
+            389.4,
+            381.2,
+            418.0,
+            598.5
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "Multi-Defect Combination Test",
+      "defect_type": "multi",
+      "latency_ms": 311.71,
+      "detections_count": 2,
+      "detections": [
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.298,
+          "bbox": [
+            368.1,
+            2.7,
+            425.7,
+            595.8
+          ]
+        },
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.238,
+          "bbox": [
+            384.0,
+            221.7,
+            416.3,
+            600.0
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "Clean Road Surface Test",
+      "defect_type": "clean",
+      "latency_ms": 350.72,
+      "detections_count": 2,
+      "detections": [
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.369,
+          "bbox": [
+            379.4,
+            3.7,
+            428.6,
+            596.5
+          ]
+        },
+        {
+          "class_id": 0,
+          "class_name": "longitudinal crack",
+          "confidence": 0.228,
+          "bbox": [
+            383.2,
+            220.7,
+            417.6,
+            600.0
+          ]
+        }
+      ]
+    }
+  ]
+}

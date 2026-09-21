@@ -44,3 +44,9 @@ frontend/*.tsbuildinfo
 frontend/vite.config.d.ts
 frontend/vite.config.js
 
+# Python cache
+__pycache__
+*/__pycache__
+*.pyc
+.pytest_cache
+

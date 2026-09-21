@@ -12,7 +12,11 @@ import { Breadcrumbs } from '../../components/ui/Breadcrumbs';
 import { FileUploader } from '../../components/forms/FileUploader';
 import { LocationPicker } from '../../components/forms/LocationPicker';
 import { VoiceInputButton } from '../../components/forms/VoiceInputButton';
+import { DetectionOverlay } from '../../components/ui/DetectionOverlay';
 import { WARDS_DATA, LUCKNOW_COORDINATES, ROAD_DEFECT_CLASSES } from '../../constants';
+import { formatDefectClass } from '../../utils/defectClasses';
+import { aiService } from '../../services/api/ai.service';
+import { RoadDefectDetection } from '../../types';
 import {
   Camera,
   MapPin,
@@ -21,12 +25,13 @@ import {
   ArrowRight,
   ArrowLeft,
   Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SAMPLE_ROAD_PHOTOS = [
   { label: 'Longitudinal Crack', url: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=800&auto=format&fit=crop&q=80', defect: 'longitudinal crack' },
-  { label: 'Severe Pothole', url: 'https://images.unsplash.com/photo-1578983427937-26078ee3d9d3?w=800&auto=format&fit=crop&q=80', defect: 'Pothole' },
+  { label: 'Severe Pothole', url: 'https://images.unsplash.com/photo-1578983427937-26078ee3d9d3?w=800&auto=format&fit=crop&q=80', defect: 'pothole' },
   { label: 'Alligator Surface Crack', url: 'https://images.unsplash.com/photo-1584463699039-38c6d71b5634?w=800&auto=format&fit=crop&q=80', defect: 'alligator crack' },
   { label: 'Transverse Fissure', url: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&auto=format&fit=crop&q=80', defect: 'transverse crack' },
 ];
@@ -51,8 +56,81 @@ export const ReportPotholePage: React.FC = () => {
   );
   const [landmark, setLandmark] = useState<string>('Opposite GPO crossing');
 
+  // AI Inference State
+  const [previewDetection, setPreviewDetection] = useState<RoadDefectDetection | undefined>();
+  const [isDetecting, setIsDetecting] = useState<boolean>(false);
+
   // Success State
   const [createdReportId, setCreatedReportId] = useState<string | null>(null);
+
+  const isProductionApi = import.meta.env.VITE_API_MODE === 'production';
+
+  // Run or refresh AI detection
+  const runAIDetection = async (url: string, file?: File) => {
+    // Clear stale prediction immediately
+    setPreviewDetection(undefined);
+
+    if (isProductionApi) {
+      setIsDetecting(true);
+      try {
+        const detection = await aiService.detectDefects({
+          file,
+          image_url: !file ? url : undefined,
+          confidence_threshold: 0.25,
+        });
+        setPreviewDetection(detection);
+        if (detection.primary_defect) {
+          setIssueCategory(detection.primary_defect);
+        }
+      } catch (err: any) {
+        setPreviewDetection({
+          model_version: 'RDD2022-YOLO11',
+          detected: false,
+          confidence: 0,
+          detections: [],
+          inference_time_ms: 0,
+          timestamp: new Date().toISOString(),
+          error: 'AI analysis is currently unavailable. Please retry.',
+        });
+      } finally {
+        setIsDetecting(false);
+      }
+    } else {
+      // Mock mode: clear and generate accurate category preview
+      const targetClass = issueCategory || 'longitudinal crack';
+      setPreviewDetection({
+        model_version: 'RDD2022-YOLO11-demo',
+        detected: true,
+        confidence: 0.92,
+        primaryDefectClass: targetClass,
+        primary_defect: targetClass,
+        primary_confidence: 0.92,
+        detections: [
+          {
+            class: targetClass,
+            class_name: targetClass,
+            confidence: 0.92,
+            bbox: [120, 180, 500, 480],
+          },
+        ],
+        inference_time_ms: 78,
+        timestamp: new Date().toISOString(),
+        isMock: true,
+        image_width: 800,
+        image_height: 600,
+      });
+    }
+  };
+
+  const handleImageChange = (url: string, file?: File, suggestedCategory?: string) => {
+    setImageUrl(url);
+    setImageFile(file);
+    if (suggestedCategory) {
+      setIssueCategory(suggestedCategory);
+    }
+    // Discard stale detections
+    runAIDetection(url, file);
+  };
 
   const handleNext = () => {
     if (step === 1 && !imageUrl) {
@@ -126,11 +204,11 @@ export const ReportPotholePage: React.FC = () => {
 
           <div className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
             <div><strong>Location:</strong> {address}</div>
-            <div><strong>Category:</strong> <span className="capitalize">{issueCategory}</span></div>
+            <div><strong>Category:</strong> <span className="capitalize">{formatDefectClass(issueCategory)}</span></div>
             <div><strong>Description:</strong> {description}</div>
             <div className="pt-2 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>RDD2022 AI road defect analysis completed (94% confidence)</span>
+              <span>RDD2022 AI road defect analysis completed ({formatDefectClass(issueCategory)})</span>
             </div>
           </div>
         </Card>
@@ -210,16 +288,13 @@ export const ReportPotholePage: React.FC = () => {
             <div className="space-y-1">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Step 1: Upload Road Defect Photograph</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Clear photographs enable the RDD2022 computer vision model to infer defect type, bounding coordinates, and dimensions.
+                Clear photographs enable the RDD2022 YOLO11 model to detect defect class, bounding coordinates, and dimensions.
               </p>
             </div>
 
             <FileUploader
               value={imageUrl}
-              onChange={(url, file) => {
-                setImageUrl(url);
-                setImageFile(file);
-              }}
+              onChange={(url, file) => handleImageChange(url, file)}
             />
 
             {/* Quick Demo Photo Selection */}
@@ -232,11 +307,7 @@ export const ReportPotholePage: React.FC = () => {
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => {
-                      setImageUrl(p.url);
-                      setImageFile(undefined);
-                      setIssueCategory(p.defect);
-                    }}
+                    onClick={() => handleImageChange(p.url, undefined, p.defect)}
                     className={`relative rounded-xl overflow-hidden border p-1 text-left transition ${
                       imageUrl === p.url ? 'border-primary-600 ring-2 ring-primary-200 dark:ring-primary-900' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
                     }`}
@@ -249,6 +320,35 @@ export const ReportPotholePage: React.FC = () => {
                 ))}
               </div>
             </div>
+
+            {/* Live AI Overlay Preview if available */}
+            {imageUrl && (
+              <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-primary-600" />
+                    AI Detection Overlay Preview
+                  </span>
+                  {isProductionApi && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => runAIDetection(imageUrl, imageFile)}
+                      isLoading={isDetecting}
+                      leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+                    >
+                      Retry Analysis
+                    </Button>
+                  )}
+                </div>
+                <DetectionOverlay
+                  imageUrl={imageUrl}
+                  detection={previewDetection}
+                  className="max-h-72"
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -312,7 +412,7 @@ export const ReportPotholePage: React.FC = () => {
               >
                 {ROAD_DEFECT_CLASSES.map((cls) => (
                   <option key={cls} value={cls}>
-                    {cls.charAt(0).toUpperCase() + cls.slice(1)}
+                    {formatDefectClass(cls)}
                   </option>
                 ))}
               </select>
@@ -371,11 +471,15 @@ export const ReportPotholePage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-900 max-h-48">
-                <img src={imageUrl} alt="Road Defect Preview" className="w-full h-full object-cover" />
+                <DetectionOverlay
+                  imageUrl={imageUrl}
+                  detection={previewDetection}
+                  className="w-full h-full object-cover"
+                />
               </div>
               <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs text-slate-700 dark:text-slate-300">
                 <div><strong>Ward:</strong> {WARDS_DATA.find((w) => w.id === wardId)?.name}</div>
-                <div><strong>Category:</strong> <span className="capitalize">{issueCategory}</span></div>
+                <div><strong>Category:</strong> <span className="capitalize">{formatDefectClass(issueCategory)}</span></div>
                 <div><strong>Location:</strong> {address}</div>
                 <div><strong>Coordinates:</strong> {latitude.toFixed(5)}, {longitude.toFixed(5)}</div>
                 <div><strong>Landmark:</strong> {landmark || 'N/A'}</div>
@@ -386,7 +490,7 @@ export const ReportPotholePage: React.FC = () => {
             <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>
-                Upon submission, the RDD2022 multi-defect AI model will analyze the image in real-time.
+                Upon submission, the RDD2022 YOLO11 model will analyze the image in real-time.
               </span>
             </div>
           </div>

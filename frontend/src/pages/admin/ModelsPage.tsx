@@ -59,8 +59,8 @@ export const ModelsPage: React.FC = () => {
               key={cls}
               className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center space-y-1"
             >
-              <span className="text-[10px] font-bold text-primary-600 dark:text-primary-400">Class {idx + 1}</span>
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 capitalize">{cls}</p>
+              <span className="text-[10px] font-bold text-primary-600 dark:text-primary-400">Class ID {idx}</span>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{cls}</p>
             </div>
           ))}
         </div>

@@ -81,19 +81,28 @@ export interface Ward {
 
 export interface BoundingBox {
   class: string;
+  class_id?: number;
+  class_name?: string;
   confidence: number;
-  // Normalized or pixel coords: [x1, y1, x2, y2]
+  // Coordinates in image space: [x1, y1, x2, y2]
   bbox: [number, number, number, number];
 }
 
 export interface RoadDefectDetection {
   model_version: string;
+  model_name?: string;
   detected: boolean;
   confidence: number;
   primaryDefectClass?: string;
+  primary_defect?: string;
+  primary_confidence?: number;
   detections: BoundingBox[];
   inference_time_ms: number;
   timestamp: string;
+  image_width?: number;
+  image_height?: number;
+  isMock?: boolean;
+  error?: string;
   pothole_detected?: boolean; // legacy alias
 }
 

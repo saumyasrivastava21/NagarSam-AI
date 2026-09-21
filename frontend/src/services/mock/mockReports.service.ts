@@ -78,10 +78,33 @@ export class MockReportsService implements IReportsService {
     const fallbackImageUrl = 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=800&auto=format&fit=crop&q=80';
     const imageUrl = dto.imageUrl || fallbackImageUrl;
 
-    // Simulated RDD2022 model inference
-    const confidence = 0.94;
-    const severity: Severity = confidence > 0.9 ? 'HIGH' : 'MEDIUM';
-    const priority: Priority = severity === 'HIGH' ? 'HIGH' : 'MEDIUM';
+    // Detect target class from description / landmark / category
+    const descLower = (dto.description + ' ' + (dto.landmark || '')).toLowerCase();
+    let targetClass = 'longitudinal crack';
+    let targetClassId = 0;
+    let bbox: [number, number, number, number] = [120, 180, 500, 480];
+
+    if (descLower.includes('pothole') || descLower.includes('cavity')) {
+      targetClass = 'pothole';
+      targetClassId = 4;
+      bbox = [140, 200, 520, 610];
+    } else if (descLower.includes('transverse')) {
+      targetClass = 'transverse crack';
+      targetClassId = 1;
+      bbox = [100, 250, 700, 380];
+    } else if (descLower.includes('alligator') || descLower.includes('fatigue')) {
+      targetClass = 'alligator crack';
+      targetClassId = 2;
+      bbox = [150, 160, 580, 520];
+    } else if (descLower.includes('corruption') || descLower.includes('erosion') || descLower.includes('subsidence')) {
+      targetClass = 'other corruption';
+      targetClassId = 3;
+      bbox = [180, 220, 620, 540];
+    }
+
+    const confidence = 0.92;
+    const severity: Severity = targetClass === 'pothole' ? 'CRITICAL' : targetClass === 'alligator crack' ? 'HIGH' : 'MEDIUM';
+    const priority: Priority = severity === 'CRITICAL' ? 'CRITICAL' : severity === 'HIGH' ? 'HIGH' : 'MEDIUM';
 
     const newReport: Report = {
       id: reportId,
@@ -89,6 +112,8 @@ export class MockReportsService implements IReportsService {
       citizenName: user.name || dto.citizenName || 'Citizen Reporter',
       citizenPhone: user.phone || dto.citizenPhone || '+91 98765 43210',
       imageUrl,
+      issueType: targetClass,
+      primaryDefect: targetClass,
       description: dto.description,
       landmark: dto.landmark,
       latitude: dto.latitude,
@@ -102,23 +127,35 @@ export class MockReportsService implements IReportsService {
       departmentId: dept.id,
       departmentName: dept.name,
       aiDetection: {
-        model_version: 'rdd2022-v1',
+        model_version: 'RDD2022-YOLO11-demo',
         detected: true,
-        pothole_detected: true,
+        pothole_detected: targetClass === 'pothole',
         confidence,
+        primaryDefectClass: targetClass,
+        primary_defect: targetClass,
+        primary_confidence: confidence,
         detections: [
-          { class: 'pothole', confidence, bbox: [130, 190, 510, 600] },
+          {
+            class: targetClass,
+            class_id: targetClassId,
+            class_name: targetClass,
+            confidence,
+            bbox,
+          },
         ],
-        inference_time_ms: 84,
+        inference_time_ms: 78,
         timestamp: new Date().toISOString(),
+        isMock: true,
+        image_width: 800,
+        image_height: 600,
       },
       aiPriorityReasoning: {
         recommendation: priority,
-        confidenceScore: 92,
+        confidenceScore: 91,
         factors: [
-          'RDD2022 visual confidence (94%)',
-          'Road fissure surface area threshold exceeded',
-          'Proximity to municipal bus corridor',
+          `RDD2022 visual confidence (92%) for ${targetClass}`,
+          'Road fissure surface area threshold analyzed',
+          'Corridor transit density evaluated',
         ],
       },
       createdAt: new Date().toISOString(),
@@ -136,9 +173,9 @@ export class MockReportsService implements IReportsService {
         {
           id: `TL-${Date.now()}-2`,
           status: 'UNDER_REVIEW',
-          title: 'AI Surface Analysis Complete',
-          description: 'RDD2022-v1 confirmed pothole detection with 94% confidence.',
-          actor: 'RDD2022-v1 Model',
+          title: 'AI Defect Analysis Complete',
+          description: `RDD2022 confirmed ${targetClass} detection with 92% confidence (Simulation Mode).`,
+          actor: 'RDD2022 AI Engine',
           actorRole: 'ADMIN',
           timestamp: new Date(Date.now() + 1000).toISOString(),
         },
