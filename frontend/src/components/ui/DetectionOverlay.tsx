@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { RoadDefectDetection } from '../../types';
-import { Sparkles, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Sparkles, Eye, EyeOff, AlertCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { formatDefectClass } from '../../utils/defectClasses';
 
@@ -86,6 +86,16 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
         </div>
       )}
 
+      {/* Partial status alert if one model failed */}
+      {detection?.status === 'partial' && (
+        <div className="absolute inset-x-0 top-0 bg-amber-900/90 backdrop-blur-md p-2 text-amber-100 text-[11px] flex items-center justify-between px-4 z-10">
+          <div className="flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+            <span>Dual-Model Partial Inference: Results from active model displayed.</span>
+          </div>
+        </div>
+      )}
+
       {/* Bounding Boxes Layer */}
       {showBoxes && detection && isDetected && !detection.error && (
         <div className="absolute inset-0 pointer-events-none" aria-label="AI defect bounding boxes overlay">
@@ -93,6 +103,7 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
             const classKey = (d.class_name || d.class || '').toLowerCase();
             const colorTheme = DEFECT_COLOR_MAP[classKey] || DEFAULT_COLOR;
             const displayLabel = formatDefectClass(d.class_name || d.class);
+            const sourceTag = d.model_source ? (d.model_source === 'pothole' ? 'Pothole Detector' : 'General Detector') : null;
 
             // Compute percentage coordinates relative to original image dimensions
             const [x1, y1, x2, y2] = d.bbox;
@@ -117,7 +128,7 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
                   colorTheme.shadow
                 )}
               >
-                {/* Defect Class Pill */}
+                {/* Defect Class Pill with Model Source Indicator */}
                 <div
                   className={cn(
                     'absolute -top-7 left-0 text-white text-[11px] font-bold px-2 py-0.5 rounded shadow flex items-center gap-1.5 whitespace-nowrap',
@@ -128,6 +139,11 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
                   <span className={cn('px-1 py-0.2 rounded text-[10px]', colorTheme.badge)}>
                     {(d.confidence * 100).toFixed(0)}%
                   </span>
+                  {sourceTag && (
+                    <span className="bg-black/30 text-[9px] px-1 py-0.2 rounded font-normal text-slate-200">
+                      {sourceTag}
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -141,17 +157,11 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
           <div className="bg-slate-900/85 backdrop-blur-md border border-slate-700/80 text-white text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-md">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
             <span className="font-semibold text-slate-200">
-              {detection.model_version || (detection.isMock ? 'RDD2022-YOLO11m-demo' : 'RDD2022-YOLO11m-v1')}
+              Dual YOLO (Pothole + General Defect)
             </span>
-            {detection.isMock || detection.source === 'mock' ? (
-              <span className="text-[10px] font-bold bg-amber-900/80 text-amber-300 border border-amber-600/50 px-1.5 py-0.2 rounded">
-                DEMO DATA
-              </span>
-            ) : (
-              <span className="text-[10px] font-bold bg-emerald-900/80 text-emerald-300 border border-emerald-600/50 px-1.5 py-0.2 rounded">
-                LIVE
-              </span>
-            )}
+            <span className="text-[10px] font-bold bg-emerald-900/80 text-emerald-300 border border-emerald-600/50 px-1.5 py-0.2 rounded">
+              LIVE
+            </span>
             <span className="text-slate-400">·</span>
             <span className="text-emerald-400 font-bold">
               {(detection.confidence * 100).toFixed(0)}% Conf.

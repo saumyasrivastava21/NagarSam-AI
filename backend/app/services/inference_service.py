@@ -4,103 +4,148 @@ import io
 import base64
 import asyncio
 import threading
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 from PIL import Image
 import numpy as np
 import requests
 from ultralytics import YOLO
 
 from backend.app.config import settings
-from backend.app.schemas.ai import DetectionItem, DetectionResponse, ImageMeta, ModelInfoResponse
+from backend.app.schemas.ai import (
+    DetectionItem,
+    DetectionResponse,
+    ImageMeta,
+    ModelInfoResponse,
+    SingleModelInfo,
+    ModelExecutionStatus,
+    DualModelMetadata,
+)
 
-class YOLOInferenceService:
-    _instance: Optional["YOLOInferenceService"] = None
+class DualYOLOInferenceService:
+    _instance: Optional["DualYOLOInferenceService"] = None
     _lock = threading.Lock()
 
     def __init__(self):
-        self.checkpoint_path = settings.MODEL_PATH
-        self.model: Optional[YOLO] = None
-        self.class_names: Dict[int, str] = {}
-        self.is_ready = False
-        self.load_error: Optional[str] = None
+        self.pothole_path = settings.POTHOLE_MODEL_PATH
+        self.general_path = settings.GENERAL_MODEL_PATH
+
+        self.pothole_model: Optional[YOLO] = None
+        self.general_model: Optional[YOLO] = None
+
+        self.pothole_classes: Dict[int, str] = {}
+        self.general_classes: Dict[int, str] = {}
+
+        self.pothole_ready = False
+        self.general_ready = False
+
+        self.pothole_error: Optional[str] = None
+        self.general_error: Optional[str] = None
+
         self._semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_INFERENCES)
-        self.load_model()
+        self.load_models()
 
     @classmethod
-    def get_instance(cls) -> "YOLOInferenceService":
+    def get_instance(cls) -> "DualYOLOInferenceService":
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = YOLOInferenceService()
+                    cls._instance = DualYOLOInferenceService()
         return cls._instance
 
-    def _ensure_checkpoint_available(self) -> str:
-        """Downloads checkpoint from S3 if configured and not present locally."""
-        local_path = self.checkpoint_path
-        if os.path.exists(local_path):
-            return local_path
+    @property
+    def is_ready(self) -> bool:
+        # Service is ready when at least one model is operational (or both)
+        return self.pothole_ready or self.general_ready
 
-        # If S3 URI is configured, attempt secure download
-        if settings.MODEL_S3_URI and settings.MODEL_S3_URI.startswith("s3://"):
-            try:
-                import boto3
-                from urllib.parse import urlparse
-                parsed = urlparse(settings.MODEL_S3_URI)
-                bucket_name = parsed.netloc
-                key = parsed.path.lstrip('/')
-                
-                os.makedirs(settings.MODEL_CACHE_DIR, exist_ok=True)
-                download_dest = os.path.join(settings.MODEL_CACHE_DIR, os.path.basename(key) or "model.pt")
-                print(f"[YOLOInferenceService] Downloading model artifact from {settings.MODEL_S3_URI} to {download_dest}...")
-                
-                s3_client = boto3.client("s3")
-                s3_client.download_file(bucket_name, key, download_dest)
-                print(f"[YOLOInferenceService] S3 Model download complete: {download_dest}")
-                self.checkpoint_path = download_dest
-                return download_dest
-            except Exception as e:
-                print(f"[YOLOInferenceService] Failed to download from S3 ({settings.MODEL_S3_URI}): {e}")
-        
-        return local_path
+    @property
+    def general_class_names(self) -> Dict[int, str]:
+        return self.general_classes
 
-    def load_model(self):
-        """Loads and validates the YOLO11 model checkpoint."""
+    @property
+    def pothole_class_names(self) -> Dict[int, str]:
+        return self.pothole_classes
+
+    @property
+    def class_names(self) -> Dict[int, str]:
+        # Authoritative unified 5 classes
+        return {
+            0: "longitudinal crack",
+            1: "transverse crack",
+            2: "alligator crack",
+            3: "other corruption",
+            4: "pothole"
+        }
+
+    def load_models(self):
+        """Loads and initializes both Model A (Pothole) and Model B (General Defect)."""
+        # 1. Load Pothole Model
         try:
-            target_path = self._ensure_checkpoint_available()
-            if not os.path.exists(target_path):
-                self.is_ready = False
-                self.load_error = f"Checkpoint not found at: {target_path}."
-                print(f"[YOLOInferenceService] ERROR: {self.load_error}")
-                return
-
-            print(f"[YOLOInferenceService] Loading YOLO model from {target_path}...")
-            self.model = YOLO(target_path)
-            
-            # Extract and verify class mapping directly from model checkpoint
-            names = self.model.names
-            self.class_names = {int(k): str(v) for k, v in names.items()}
-            self.is_ready = True
-            self.load_error = None
-            print(f"[YOLOInferenceService] Model loaded successfully on device '{settings.MODEL_DEVICE}' with {len(self.class_names)} classes: {self.class_names}")
+            if not os.path.exists(self.pothole_path):
+                self.pothole_ready = False
+                self.pothole_error = f"Pothole checkpoint not found at: {self.pothole_path}"
+                print(f"[DualYOLOInferenceService] WARN: {self.pothole_error}")
+            else:
+                print(f"[DualYOLOInferenceService] Loading Pothole Detector from {self.pothole_path}...")
+                self.pothole_model = YOLO(self.pothole_path)
+                self.pothole_classes = {int(k): str(v) for k, v in self.pothole_model.names.items()}
+                self.pothole_ready = True
+                self.pothole_error = None
+                print(f"[DualYOLOInferenceService] Pothole model loaded ({len(self.pothole_classes)} classes)")
         except Exception as e:
-            self.is_ready = False
-            self.load_error = str(e)
-            print(f"[YOLOInferenceService] Exception loading model: {e}")
+            self.pothole_ready = False
+            self.pothole_error = str(e)
+            print(f"[DualYOLOInferenceService] Error loading Pothole model: {e}")
+
+        # 2. Load General Defect Model
+        try:
+            if not os.path.exists(self.general_path):
+                self.general_ready = False
+                self.general_error = f"General checkpoint not found at: {self.general_path}"
+                print(f"[DualYOLOInferenceService] WARN: {self.general_error}")
+            else:
+                print(f"[DualYOLOInferenceService] Loading General Road Defect Detector from {self.general_path}...")
+                self.general_model = YOLO(self.general_path)
+                self.general_classes = {int(k): str(v) for k, v in self.general_model.names.items()}
+                self.general_ready = True
+                self.general_error = None
+                print(f"[DualYOLOInferenceService] General model loaded ({len(self.general_classes)} classes: {self.general_classes})")
+        except Exception as e:
+            self.general_ready = False
+            self.general_error = str(e)
+            print(f"[DualYOLOInferenceService] Error loading General model: {e}")
 
     def get_model_info(self) -> ModelInfoResponse:
-        device_str = settings.MODEL_DEVICE
-        if self.model is not None and hasattr(self.model, "device"):
-            device_str = str(self.model.device)
+        p_info = SingleModelInfo(
+            name=settings.POTHOLE_MODEL_NAME,
+            version=settings.POTHOLE_MODEL_VERSION,
+            checkpoint_path=os.path.basename(self.pothole_path),
+            architecture="Ultralytics YOLO (PyTorch)",
+            classes_count=len(self.pothole_classes),
+            classes={4: "Pothole"} if self.pothole_ready else self.pothole_classes,
+            device=settings.MODEL_DEVICE,
+            status="READY" if self.pothole_ready else f"UNAVAILABLE: {self.pothole_error}",
+        )
+
+        g_info = SingleModelInfo(
+            name=settings.GENERAL_MODEL_NAME,
+            version=settings.GENERAL_MODEL_VERSION,
+            checkpoint_path=os.path.basename(self.general_path),
+            architecture="Ultralytics YOLO (PyTorch)",
+            classes_count=len(self.general_classes),
+            classes=self.general_classes,
+            device=settings.MODEL_DEVICE,
+            status="READY" if self.general_ready else f"UNAVAILABLE: {self.general_error}",
+        )
+
+        overall_status = "FULLY_READY" if (self.pothole_ready and self.general_ready) else "PARTIALLY_READY" if self.is_ready else "UNAVAILABLE"
 
         return ModelInfoResponse(
-            model_name=settings.MODEL_NAME,
-            model_version=settings.MODEL_VERSION,
-            checkpoint_path=os.path.basename(self.checkpoint_path) if self.checkpoint_path else "unconfigured",
-            framework="Ultralytics YOLO (PyTorch)",
-            classes_count=len(self.class_names),
-            classes=self.class_names,
-            device=device_str,
-            status="READY" if self.is_ready else "UNAVAILABLE",
+            status=overall_status,
+            device=settings.MODEL_DEVICE,
+            models={
+                "pothole": p_info,
+                "general": g_info,
+            }
         )
 
     def process_image(self, image_input) -> Tuple[Image.Image, int, int]:
@@ -111,27 +156,21 @@ class YOLOInferenceService:
             img = image_input.convert("RGB")
         elif isinstance(image_input, bytes):
             if len(image_input) > max_bytes:
-                raise ValueError(f"Image file size ({len(image_input)} bytes) exceeds max allowed {settings.MAX_IMAGE_SIZE_MB}MB.")
+                raise ValueError(f"Image file size exceeds {settings.MAX_IMAGE_SIZE_MB}MB.")
             img = Image.open(io.BytesIO(image_input)).convert("RGB")
         elif isinstance(image_input, str):
             if image_input.startswith("data:image"):
                 header, base64_data = image_input.split(",", 1)
                 img_bytes = base64.b64decode(base64_data)
-                if len(img_bytes) > max_bytes:
-                    raise ValueError(f"Image payload exceeds max allowed {settings.MAX_IMAGE_SIZE_MB}MB.")
                 img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
             elif image_input.startswith("http://") or image_input.startswith("https://"):
                 resp = requests.get(image_input, timeout=15)
                 resp.raise_for_status()
-                if len(resp.content) > max_bytes:
-                    raise ValueError(f"Remote image exceeds max allowed {settings.MAX_IMAGE_SIZE_MB}MB.")
                 img = Image.open(io.BytesIO(resp.content)).convert("RGB")
             elif os.path.exists(image_input):
                 img = Image.open(image_input).convert("RGB")
             else:
                 img_bytes = base64.b64decode(image_input)
-                if len(img_bytes) > max_bytes:
-                    raise ValueError(f"Image payload exceeds max allowed {settings.MAX_IMAGE_SIZE_MB}MB.")
                 img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
         else:
             raise ValueError(f"Unsupported image input type: {type(image_input)}")
@@ -141,113 +180,204 @@ class YOLOInferenceService:
             raise ValueError("Invalid image dimensions detected.")
         return img, width, height
 
-    def _sync_predict(self, img: Image.Image, conf: float) -> Tuple[List[DetectionItem], Optional[str], Optional[float], float]:
-        """Synchronous inference runner called within thread pool."""
+    def _sync_predict_dual(
+        self,
+        img: Image.Image,
+        confidence_threshold: Optional[float] = None
+    ) -> Tuple[List[DetectionItem], DualModelMetadata, str, float]:
+        """Runs both models, filters routing, merges valid predictions, and captures per-model status."""
+        pothole_conf = confidence_threshold if confidence_threshold is not None else settings.POTHOLE_CONFIDENCE_THRESHOLD
+        general_conf = confidence_threshold if confidence_threshold is not None else settings.GENERAL_CONFIDENCE_THRESHOLD
+
+        pothole_status = "uninitialized"
+        general_status = "uninitialized"
+        pothole_err = None
+        general_err = None
+
+        merged_detections: List[DetectionItem] = []
+
         t0 = time.perf_counter()
-        results = self.model.predict(
-            source=img,
-            conf=conf,
-            iou=settings.MODEL_IOU_THRESHOLD,
-            imgsz=settings.MODEL_IMAGE_SIZE,
-            verbose=False,
-            device=settings.MODEL_DEVICE
-        )
+
+        # 1. Run Pothole-Specific Model
+        if self.pothole_ready and self.pothole_model is not None:
+            try:
+                p_results = self.pothole_model.predict(
+                    source=img,
+                    conf=pothole_conf,
+                    iou=settings.MODEL_IOU_THRESHOLD,
+                    imgsz=settings.MODEL_IMAGE_SIZE,
+                    verbose=False,
+                    device=settings.MODEL_DEVICE
+                )
+                pothole_status = "completed"
+
+                if len(p_results) > 0 and p_results[0].boxes is not None:
+                    p_boxes = p_results[0].boxes
+                    for i in range(len(p_boxes)):
+                        raw_cls_id = int(p_boxes.cls[i].item())
+                        raw_cls_name = self.pothole_classes.get(raw_cls_id, "Pothole")
+                        conf_score = round(float(p_boxes.conf[i].item()), 4)
+                        xyxy = [round(float(c), 2) for c in p_boxes.xyxy[i].tolist()]
+
+                        # Route as Pothole detection
+                        merged_detections.append(
+                            DetectionItem(
+                                class_id=4,
+                                class_name="Pothole",
+                                confidence=conf_score,
+                                bbox=xyxy,
+                                model_source="pothole"
+                            )
+                        )
+            except Exception as e:
+                pothole_status = "failed"
+                pothole_err = str(e)
+        else:
+            pothole_status = "failed"
+            pothole_err = self.pothole_error or "Model not loaded"
+
+        # 2. Run General Road-Defect Model
+        if self.general_ready and self.general_model is not None:
+            try:
+                g_results = self.general_model.predict(
+                    source=img,
+                    conf=general_conf,
+                    iou=settings.MODEL_IOU_THRESHOLD,
+                    imgsz=settings.MODEL_IMAGE_SIZE,
+                    verbose=False,
+                    device=settings.MODEL_DEVICE
+                )
+                general_status = "completed"
+
+                if len(g_results) > 0 and g_results[0].boxes is not None:
+                    g_boxes = g_results[0].boxes
+                    for i in range(len(g_boxes)):
+                        cls_id = int(g_boxes.cls[i].item())
+                        cls_name = self.general_classes.get(cls_id, f"class_{cls_id}")
+                        conf_score = round(float(g_boxes.conf[i].item()), 4)
+                        xyxy = [round(float(c), 2) for c in g_boxes.xyxy[i].tolist()]
+
+                        # Mandatory Rule 3: Exclude general model's Pothole predictions to prevent competing detections
+                        if cls_id == 4 or "pothole" in cls_name.lower():
+                            continue
+
+                        merged_detections.append(
+                            DetectionItem(
+                                class_id=cls_id,
+                                class_name=cls_name,
+                                confidence=conf_score,
+                                bbox=xyxy,
+                                model_source="general"
+                            )
+                        )
+            except Exception as e:
+                general_status = "failed"
+                general_err = str(e)
+        else:
+            general_status = "failed"
+            general_err = self.general_error or "Model not loaded"
+
         t1 = time.perf_counter()
         inference_time_ms = round((t1 - t0) * 1000, 2)
 
-        detections: List[DetectionItem] = []
-        primary_defect: Optional[str] = None
-        primary_confidence: Optional[float] = None
+        # 3. Determine Overall Dual-Model Execution Status
+        if pothole_status == "completed" and general_status == "completed":
+            overall_status = "completed"
+        elif pothole_status == "completed" or general_status == "completed":
+            overall_status = "partial"
+        else:
+            overall_status = "failed"
 
-        if len(results) > 0 and results[0].boxes is not None:
-            boxes = results[0].boxes
-            for i in range(len(boxes)):
-                cls_id = int(boxes.cls[i].item())
-                cls_name = self.class_names.get(cls_id, f"class_{cls_id}")
-                conf_score = round(float(boxes.conf[i].item()), 4)
-                
-                # Raw pixel coordinates in original un-normalized image space [x1, y1, x2, y2]
-                xyxy = boxes.xyxy[i].tolist()
-                bbox = [round(float(c), 2) for c in xyxy]
+        models_meta = DualModelMetadata(
+            pothole=ModelExecutionStatus(
+                name=settings.POTHOLE_MODEL_NAME,
+                version=settings.POTHOLE_MODEL_VERSION,
+                status=pothole_status,
+                error=pothole_err,
+                classes_count=len(self.pothole_classes)
+            ),
+            general=ModelExecutionStatus(
+                name=settings.GENERAL_MODEL_NAME,
+                version=settings.GENERAL_MODEL_VERSION,
+                status=general_status,
+                error=general_err,
+                classes_count=len(self.general_classes)
+            )
+        )
 
-                detections.append(
-                    DetectionItem(
-                        class_id=cls_id,
-                        class_name=cls_name,
-                        confidence=conf_score,
-                        bbox=bbox
-                    )
-                )
-
-            if detections:
-                # Primary defect derived strictly from highest confidence detection
-                sorted_by_conf = sorted(detections, key=lambda d: d.confidence, reverse=True)
-                primary_defect = sorted_by_conf[0].class_name
-                primary_confidence = sorted_by_conf[0].confidence
-
-        return detections, primary_defect, primary_confidence, inference_time_ms
+        return merged_detections, models_meta, overall_status, inference_time_ms
 
     async def detect_async(
         self,
         image_input,
         confidence_threshold: Optional[float] = None
     ) -> DetectionResponse:
-        """Asynchronous non-blocking inference wrapper with concurrency control."""
-        if not self.is_ready or self.model is None:
-            self.load_model()
-            if not self.is_ready or self.model is None:
-                raise RuntimeError(f"AI Model is unavailable: {self.load_error or 'Checkpoint failed to load.'}")
+        """Asynchronous non-blocking dual-model inference pipeline."""
+        if not self.is_ready:
+            self.load_models()
+            if not self.is_ready:
+                raise RuntimeError("No AI models are available. Check checkpoint availability.")
 
-        conf = confidence_threshold if confidence_threshold is not None else settings.MODEL_CONFIDENCE_THRESHOLD
         img, width, height = self.process_image(image_input)
 
         async with self._semaphore:
-            # Offload CPU/GPU intensive predict call to thread pool
-            detections, primary_defect, primary_confidence, inference_time_ms = await asyncio.to_thread(
-                self._sync_predict, img, conf
+            detections, models_meta, overall_status, inference_time_ms = await asyncio.to_thread(
+                self._sync_predict_dual, img, confidence_threshold
             )
+
+        primary_defect = None
+        primary_confidence = None
+        if detections:
+            sorted_by_conf = sorted(detections, key=lambda d: d.confidence, reverse=True)
+            primary_defect = sorted_by_conf[0].class_name
+            primary_confidence = sorted_by_conf[0].confidence
 
         import uuid
         req_id = f"req_{uuid.uuid4().hex[:12]}"
 
         return DetectionResponse(
             request_id=req_id,
-            model_name=settings.MODEL_NAME,
-            model_version=settings.MODEL_VERSION,
+            status=overall_status,
             source="live",
-            status="completed",
             image=ImageMeta(width=width, height=height),
             inference_time_ms=inference_time_ms,
+            models=models_meta,
             detections=detections,
             primary_defect=primary_defect,
             primary_confidence=primary_confidence,
         )
 
     def detect(self, image_input, confidence_threshold: Optional[float] = None) -> DetectionResponse:
-        """Synchronous wrapper for scripts / unit tests."""
-        if not self.is_ready or self.model is None:
-            self.load_model()
-            if not self.is_ready or self.model is None:
-                raise RuntimeError(f"AI Model is unavailable: {self.load_error or 'Checkpoint failed to load.'}")
+        """Synchronous wrapper for test execution."""
+        if not self.is_ready:
+            self.load_models()
+            if not self.is_ready:
+                raise RuntimeError("No AI models are available.")
 
-        conf = confidence_threshold if confidence_threshold is not None else settings.MODEL_CONFIDENCE_THRESHOLD
         img, width, height = self.process_image(image_input)
-        detections, primary_defect, primary_confidence, inference_time_ms = self._sync_predict(img, conf)
+        detections, models_meta, overall_status, inference_time_ms = self._sync_predict_dual(img, confidence_threshold)
+
+        primary_defect = None
+        primary_confidence = None
+        if detections:
+            sorted_by_conf = sorted(detections, key=lambda d: d.confidence, reverse=True)
+            primary_defect = sorted_by_conf[0].class_name
+            primary_confidence = sorted_by_conf[0].confidence
 
         import uuid
         req_id = f"req_{uuid.uuid4().hex[:12]}"
 
         return DetectionResponse(
             request_id=req_id,
-            model_name=settings.MODEL_NAME,
-            model_version=settings.MODEL_VERSION,
+            status=overall_status,
             source="live",
-            status="completed",
             image=ImageMeta(width=width, height=height),
             inference_time_ms=inference_time_ms,
+            models=models_meta,
             detections=detections,
             primary_defect=primary_defect,
             primary_confidence=primary_confidence,
         )
 
-inference_service = YOLOInferenceService.get_instance()
+inference_service = DualYOLOInferenceService.get_instance()
+dual_inference_service = inference_service

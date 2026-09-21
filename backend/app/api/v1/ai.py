@@ -17,26 +17,27 @@ async def get_health():
 
 @router.get("/ready")
 async def get_readiness():
-    """Readiness probe: verifies the YOLO11 model checkpoint is loaded into memory and ready for inference."""
+    """Readiness probe: verifies dual YOLO model checkpoints are loaded into memory and ready for inference."""
     if not inference_service.is_ready:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
                 "status": "NOT_READY",
-                "reason": inference_service.load_error or "Model checkpoint is not loaded",
+                "reason": inference_service.load_error or "Model checkpoints are not loaded",
                 "ready": False
             }
         )
+    info = inference_service.get_model_info()
     return {
         "status": "READY",
-        "model_version": inference_service.get_model_info().model_version,
-        "classes_count": len(inference_service.class_names),
+        "models": {k: {"name": v.name, "version": v.version, "status": v.status} for k, v in info.models.items()},
+        "classes_count": len(inference_service.general_class_names),
         "ready": True
     }
 
 @router.get("/model-info", response_model=ModelInfoResponse)
 async def get_model_info():
-    """Returns detailed metadata about the active YOLO11 road-defect detection model."""
+    """Returns detailed metadata about the active dual YOLO road-defect detection models."""
     try:
         return inference_service.get_model_info()
     except HTTPException:
@@ -45,11 +46,11 @@ async def get_model_info():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/classes")
-async def get_classes() -> Dict[int, str]:
-    """Returns the verified 5-class mapping directly from the loaded checkpoint."""
+async def get_classes() -> Dict[str, str]:
+    """Returns the verified class mappings directly from the loaded checkpoints."""
     if not inference_service.is_ready:
-        raise HTTPException(status_code=503, detail="Model is not ready. Class mapping unavailable.")
-    return inference_service.class_names
+        raise HTTPException(status_code=503, detail="Models are not ready. Class mapping unavailable.")
+    return {str(k): v for k, v in inference_service.general_class_names.items()}
 
 @router.post("/detect", response_model=DetectionResponse)
 async def detect_road_defects(

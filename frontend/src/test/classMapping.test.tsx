@@ -176,18 +176,19 @@ describe('NagarSam AI — Locked 5-Class Mapping & Detection Regression Tests', 
     expect(screen.queryByText('Pothole')).toBeNull();
   });
 
-  it('11. Distinguishes DEMO DATA badge from LIVE INFERENCE (Bug B Fix)', () => {
-    const mockDetection: RoadDefectDetection = {
-      model_version: 'RDD2022-YOLO11m-demo',
-      source: 'mock',
-      isMock: true,
+  it('11. Distinguishes LIVE INFERENCE badge and model indicators', () => {
+    const liveDetection: RoadDefectDetection = {
+      model_version: 'pothole-v1+road-defect-v1',
+      source: 'live',
       detected: true,
       confidence: 0.92,
       detections: [
         {
           class: 'longitudinal crack',
+          class_id: 0,
           confidence: 0.92,
           bbox: [100, 100, 400, 400],
+          model_source: 'general',
         },
       ],
       inference_time_ms: 78,
@@ -197,11 +198,12 @@ describe('NagarSam AI — Locked 5-Class Mapping & Detection Regression Tests', 
     render(
       <DetectionOverlay
         imageUrl="https://images.unsplash.com/photo-1515162816999-a0c47dc192f7"
-        detection={mockDetection}
+        detection={liveDetection}
       />
     );
 
-    expect(screen.getByText('DEMO DATA')).toBeDefined();
+    expect(screen.getByText('LIVE')).toBeDefined();
+    expect(screen.getByText('Dual YOLO (Pothole + General Defect)')).toBeDefined();
   });
 
   it('12. Bounding boxes align within 0-100% of image dimensions', () => {

@@ -14,11 +14,11 @@ from backend.app.db.database import init_db, get_db_connection
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f"[{settings.PROJECT_NAME}] Initializing Database & Checkpoint...")
+    print(f"[{settings.PROJECT_NAME}] Initializing Database & Dual Model Checkpoints...")
     init_db()
     try:
-        inference_service.load_model()
-        print(f"[{settings.PROJECT_NAME}] Checkpoint loaded successfully with classes: {inference_service.class_names}")
+        inference_service.load_models()
+        print(f"[{settings.PROJECT_NAME}] Dual Models initialized (Pothole: {inference_service.pothole_ready}, General: {inference_service.general_ready})")
     except Exception as e:
         print(f"[{settings.PROJECT_NAME}] Warning during model startup: {e}")
     yield
@@ -43,11 +43,16 @@ app.add_middleware(
 
 @app.get("/health", tags=["System"])
 async def health_check():
+    info = inference_service.get_model_info()
     return {
         "status": "HEALTHY",
         "service": settings.PROJECT_NAME,
         "model_loaded": inference_service.is_ready,
-        "classes_count": len(inference_service.class_names),
+        "models_ready": inference_service.is_ready,
+        "pothole_model_loaded": inference_service.pothole_model is not None,
+        "general_model_loaded": inference_service.general_model is not None,
+        "models": {k: {"version": v.version, "status": v.status} for k, v in info.models.items()} if info else {},
+        "classes_count": len(inference_service.general_class_names),
     }
 
 # Static file serving for stored uploaded photos

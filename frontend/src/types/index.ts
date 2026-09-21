@@ -86,10 +86,20 @@ export interface BoundingBox {
   confidence: number;
   // Coordinates in image space: [x1, y1, x2, y2]
   bbox: [number, number, number, number];
+  model_source?: 'pothole' | 'general' | string;
+}
+
+export interface ModelExecutionStatus {
+  name: string;
+  version: string;
+  status: string;
+  error?: string;
+  classes_count?: number;
 }
 
 export interface RoadDefectDetection {
   request_id?: string;
+  status?: 'completed' | 'partial' | 'failed' | string;
   model_version: string;
   model_name?: string;
   source?: 'live' | 'mock';
@@ -98,6 +108,10 @@ export interface RoadDefectDetection {
   primaryDefectClass?: string;
   primary_defect?: string;
   primary_confidence?: number;
+  models?: {
+    pothole?: ModelExecutionStatus;
+    general?: ModelExecutionStatus;
+  };
   detections: BoundingBox[];
   inference_time_ms: number;
   timestamp: string;
@@ -105,7 +119,7 @@ export interface RoadDefectDetection {
   image_height?: number;
   isMock?: boolean;
   error?: string;
-  pothole_detected?: boolean; // legacy alias
+  pothole_detected?: boolean;
 }
 
 // Backward-compatible alias

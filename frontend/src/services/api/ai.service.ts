@@ -14,19 +14,22 @@ export interface BackendDetectionItem {
   class_name: string;
   confidence: number;
   bbox: [number, number, number, number];
+  model_source?: string;
 }
 
 export interface BackendDetectionResponse {
   request_id?: string;
-  model_name: string;
-  model_version: string;
-  source?: string;
   status: string;
+  source?: string;
   image: {
     width: number;
     height: number;
   };
   inference_time_ms: number;
+  models?: {
+    pothole?: { name: string; version: string; status: string; error?: string; classes_count?: number };
+    general?: { name: string; version: string; status: string; error?: string; classes_count?: number };
+  };
   detections: BackendDetectionItem[];
   primary_defect?: string;
   primary_confidence?: number;
@@ -73,6 +76,7 @@ export class AIService {
         class_name: d.class_name,
         confidence: d.confidence,
         bbox: d.bbox,
+        model_source: d.model_source || (d.class_name.toLowerCase().includes('pothole') ? 'pothole' : 'general'),
       }));
 
       const topDetection = detections.length > 0
@@ -84,14 +88,16 @@ export class AIService {
 
       return {
         request_id: data.request_id,
-        model_name: data.model_name,
-        model_version: data.model_version,
+        status: data.status || 'completed',
+        model_name: 'NagarSam Dual-Model Pipeline (Pothole + General Defect)',
+        model_version: 'DualYOLO-v1',
         source: 'live',
         detected: detections.length > 0,
         confidence: overallConfidence,
         primaryDefectClass: primaryClass,
         primary_defect: data.primary_defect || primaryClass,
         primary_confidence: data.primary_confidence || overallConfidence,
+        models: data.models,
         detections,
         inference_time_ms: data.inference_time_ms,
         timestamp: new Date().toISOString(),
