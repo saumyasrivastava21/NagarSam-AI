@@ -17,7 +17,7 @@ class Settings(BaseSettings):
         "POTHOLE_MODEL_PATH",
         os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "models", "pothole_best.pt")
     )
-    POTHOLE_CONFIDENCE_THRESHOLD: float = float(os.getenv("POTHOLE_CONFIDENCE_THRESHOLD", "0.25"))
+    POTHOLE_CONFIDENCE_THRESHOLD: float = float(os.getenv("POTHOLE_CONFIDENCE_THRESHOLD", "0.20"))
 
     # Model B: General Road-Defect Detector
     GENERAL_MODEL_NAME: str = "NagarSam General Road Defect Detector"
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
             os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "models", "nagrik OS initial.pt")
         )
     )
-    GENERAL_CONFIDENCE_THRESHOLD: float = float(os.getenv("GENERAL_CONFIDENCE_THRESHOLD", "0.25"))
+    GENERAL_CONFIDENCE_THRESHOLD: float = float(os.getenv("GENERAL_CONFIDENCE_THRESHOLD", "0.20"))
 
     # Global Model / AWS S3 Settings
     MODEL_S3_URI: Optional[str] = os.getenv("MODEL_S3_URI", None)

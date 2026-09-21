@@ -180,6 +180,19 @@ class DualYOLOInferenceService:
             raise ValueError("Invalid image dimensions detected.")
         return img, width, height
 
+    @staticmethod
+    def _calculate_iou(boxA: List[float], boxB: List[float]) -> float:
+        """Calculates Intersection-over-Union (IoU) between two bounding boxes [x1, y1, x2, y2]."""
+        xA = max(boxA[0], boxB[0])
+        yA = max(boxA[1], boxB[1])
+        xB = min(boxA[2], boxB[2])
+        yB = min(boxA[3], boxB[3])
+        interArea = max(0.0, xB - xA) * max(0.0, yB - yA)
+        boxAArea = max(0.0, boxA[2] - boxA[0]) * max(0.0, boxA[3] - boxA[1])
+        boxBArea = max(0.0, boxB[2] - boxB[0]) * max(0.0, boxB[3] - boxB[1])
+        denom = boxAArea + boxBArea - interArea
+        return interArea / denom if denom > 0 else 0.0
+
     def _sync_predict_dual(
         self,
         img: Image.Image,
@@ -197,6 +210,9 @@ class DualYOLOInferenceService:
         merged_detections: List[DetectionItem] = []
 
         t0 = time.perf_counter()
+
+        pothole_detections: List[DetectionItem] = []
+        general_detections: List[DetectionItem] = []
 
         # 1. Run Pothole-Specific Model
         if self.pothole_ready and self.pothole_model is not None:
@@ -219,16 +235,17 @@ class DualYOLOInferenceService:
                         conf_score = round(float(p_boxes.conf[i].item()), 4)
                         xyxy = [round(float(c), 2) for c in p_boxes.xyxy[i].tolist()]
 
-                        # Route as Pothole detection
-                        merged_detections.append(
-                            DetectionItem(
-                                class_id=4,
-                                class_name="Pothole",
-                                confidence=conf_score,
-                                bbox=xyxy,
-                                model_source="pothole"
+                        # Only accept if class is pothole or single-class index 0
+                        if raw_cls_id == 0 or "pothole" in str(raw_cls_name).lower():
+                            pothole_detections.append(
+                                DetectionItem(
+                                    class_id=4,
+                                    class_name="Pothole",
+                                    confidence=conf_score,
+                                    bbox=xyxy,
+                                    model_source="pothole"
+                                )
                             )
-                        )
             except Exception as e:
                 pothole_status = "failed"
                 pothole_err = str(e)
@@ -257,25 +274,43 @@ class DualYOLOInferenceService:
                         conf_score = round(float(g_boxes.conf[i].item()), 4)
                         xyxy = [round(float(c), 2) for c in g_boxes.xyxy[i].tolist()]
 
-                        # Mandatory Rule 3: Exclude general model's Pothole predictions to prevent competing detections
                         if cls_id == 4 or "pothole" in cls_name.lower():
-                            continue
-
-                        merged_detections.append(
-                            DetectionItem(
-                                class_id=cls_id,
-                                class_name=cls_name,
-                                confidence=conf_score,
-                                bbox=xyxy,
-                                model_source="general"
+                            # Check if pothole model already detected a pothole with high IoU
+                            has_overlap = False
+                            for p_det in pothole_detections:
+                                iou = self._calculate_iou(xyxy, p_det.bbox)
+                                if iou > 0.4:
+                                    has_overlap = True
+                                    break
+                            if not has_overlap:
+                                pothole_detections.append(
+                                    DetectionItem(
+                                        class_id=4,
+                                        class_name="Pothole",
+                                        confidence=conf_score,
+                                        bbox=xyxy,
+                                        model_source="general"
+                                    )
+                                )
+                        else:
+                            general_detections.append(
+                                DetectionItem(
+                                    class_id=cls_id,
+                                    class_name=cls_name,
+                                    confidence=conf_score,
+                                    bbox=xyxy,
+                                    model_source="general"
+                                )
                             )
-                        )
             except Exception as e:
                 general_status = "failed"
                 general_err = str(e)
         else:
             general_status = "failed"
             general_err = self.general_error or "Model not loaded"
+
+        # Merge deduplicated pothole and general detections
+        merged_detections = pothole_detections + general_detections
 
         t1 = time.perf_counter()
         inference_time_ms = round((t1 - t0) * 1000, 2)

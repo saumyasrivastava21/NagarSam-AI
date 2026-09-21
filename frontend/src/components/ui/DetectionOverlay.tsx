@@ -163,8 +163,10 @@ export const DetectionOverlay: React.FC<DetectionOverlayProps> = ({
               LIVE
             </span>
             <span className="text-slate-400">·</span>
-            <span className="text-emerald-400 font-bold">
-              {(detection.confidence * 100).toFixed(0)}% Conf.
+            <span className={cn('font-bold', isDetected ? 'text-emerald-400' : 'text-slate-400')}>
+              {isDetected
+                ? `${((detection.confidence || detection.detections?.[0]?.confidence || 0) * 100).toFixed(0)}% Conf.`
+                : 'No Defects'}
             </span>
           </div>
 

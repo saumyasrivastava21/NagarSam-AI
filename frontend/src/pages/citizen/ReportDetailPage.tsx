@@ -45,10 +45,13 @@ export const ReportDetailPage: React.FC = () => {
     toast.success('Incident link copied to clipboard!');
   };
 
-  const defectName = report.issueType || report.primaryDefect || 'Road Defect';
   const detections = report.aiDetection?.detections || [];
-  const primaryConfidence = report.aiDetection?.confidence || 0.94;
-  const isDetected = report.aiDetection ? (report.aiDetection.detected ?? report.aiDetection.pothole_detected) : false;
+  const isDetected = detections.length > 0 || Boolean(report.aiDetection?.detected) || Boolean(report.aiDetection?.pothole_detected);
+  const primaryDefectDetection = detections.length > 0 ? (detections[0].class_name || detections[0].class) : null;
+  const defectName = primaryDefectDetection || report.primaryDefect || report.issueType || 'Road Defect';
+  const primaryConfidence = isDetected
+    ? (report.aiDetection?.confidence || detections[0]?.confidence || 0)
+    : 0;
 
   return (
     <div className="space-y-6">
