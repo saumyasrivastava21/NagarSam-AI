@@ -38,3 +38,9 @@ backend/__pycache__
 frontend/.env
 frontend/.env.local
 
+# TypeScript build caches
+*.tsbuildinfo
+frontend/*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js
+
