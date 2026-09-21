@@ -275,6 +275,10 @@ class DualYOLOInferenceService:
                         xyxy = [round(float(c), 2) for c in g_boxes.xyxy[i].tolist()]
 
                         if cls_id == 4 or "pothole" in cls_name.lower():
+                            # Enforce pothole confidence threshold (>= 0.40)
+                            if conf_score < pothole_conf:
+                                continue
+
                             # Check if pothole model already detected a pothole with high IoU
                             has_overlap = False
                             for p_det in pothole_detections:

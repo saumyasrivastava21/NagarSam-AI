@@ -34,37 +34,45 @@ import { toast } from 'sonner';
 
 interface SamplePhotoOption {
   label: string;
-  url: string;
+  url: string;          // proxy URL used for display (avoids CORS)
+  inferenceUrl: string; // original URL sent to backend for model inference
   inherentDemoDefect: string;
   inherentDemoClassId: number;
   inherentDemoBbox: [number, number, number, number];
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const proxyUrl = (src: string) => `${API_BASE}/ai/proxy-image?url=${encodeURIComponent(src)}`;
+
 const SAMPLE_ROAD_PHOTOS: SamplePhotoOption[] = [
   {
     label: 'Longitudinal Crack',
-    url: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=800&auto=format&fit=crop&q=80',
+    inferenceUrl: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=800&auto=format&fit=crop&q=80',
+    get url() { return proxyUrl(this.inferenceUrl); },
     inherentDemoDefect: 'longitudinal crack',
     inherentDemoClassId: 0,
     inherentDemoBbox: [120, 180, 500, 480],
   },
   {
     label: 'Severe Pothole',
-    url: 'https://images.unsplash.com/photo-1578983427937-26078ee3d9d3?w=800&auto=format&fit=crop&q=80',
+    inferenceUrl: 'https://images.unsplash.com/photo-1578983427937-26078ee3d9d3?w=800&auto=format&fit=crop&q=80',
+    get url() { return proxyUrl(this.inferenceUrl); },
     inherentDemoDefect: 'pothole',
     inherentDemoClassId: 4,
     inherentDemoBbox: [140, 200, 520, 610],
   },
   {
     label: 'Alligator Surface Crack',
-    url: 'https://images.unsplash.com/photo-1584463699039-38c6d71b5634?w=800&auto=format&fit=crop&q=80',
+    inferenceUrl: 'https://images.unsplash.com/photo-1584463699039-38c6d71b5634?w=800&auto=format&fit=crop&q=80',
+    get url() { return proxyUrl(this.inferenceUrl); },
     inherentDemoDefect: 'alligator crack',
     inherentDemoClassId: 2,
     inherentDemoBbox: [100, 150, 680, 520],
   },
   {
     label: 'Transverse Fissure',
-    url: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&auto=format&fit=crop&q=80',
+    inferenceUrl: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&auto=format&fit=crop&q=80',
+    get url() { return proxyUrl(this.inferenceUrl); },
     inherentDemoDefect: 'transverse crack',
     inherentDemoClassId: 1,
     inherentDemoBbox: [80, 240, 720, 360],
@@ -155,10 +163,13 @@ export const ReportPotholePage: React.FC = () => {
 
     if (isProductionApi) {
       try {
+        // Find if previewUrl is a proxy URL, and if so, send the real inferenceUrl to backend
+        const matchedSample = SAMPLE_ROAD_PHOTOS.find((p) => p.url === previewUrl);
+        const backendImageUrl = matchedSample ? matchedSample.inferenceUrl : (!file ? previewUrl : undefined);
         const detection = await aiService.detectDefects({
           file,
-          image_url: !file ? previewUrl : undefined,
-          confidence_threshold: 0.25,
+          image_url: !file ? backendImageUrl : undefined,
+          confidence_threshold: 0.20,
         });
 
         if (abortController.signal.aborted) return;
@@ -518,7 +529,7 @@ export const ReportPotholePage: React.FC = () => {
                 <DetectionOverlay
                   imageUrl={draft.image.previewUrl}
                   detection={draft.inference.result || undefined}
-                  className="max-h-72"
+                  className="w-full"
                 />
               </div>
             )}
@@ -681,13 +692,11 @@ export const ReportPotholePage: React.FC = () => {
                 <Eye className="w-3.5 h-3.5" />
                 A. Image Evidence & AI Defect Localization
               </span>
-              <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-950 max-h-72">
-                <DetectionOverlay
-                  imageUrl={draft.image.previewUrl}
-                  detection={draft.inference.result || undefined}
-                  className="w-full h-full object-cover"
-                />
-              </div>
+              <DetectionOverlay
+                imageUrl={draft.image.previewUrl}
+                detection={draft.inference.result || undefined}
+                className="w-full"
+              />
             </div>
 
             {/* Section B: AI Model Detections (Derived strictly from YOLO11m) */}

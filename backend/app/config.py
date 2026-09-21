@@ -17,7 +17,7 @@ class Settings(BaseSettings):
         "POTHOLE_MODEL_PATH",
         os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "models", "pothole_best.pt")
     )
-    POTHOLE_CONFIDENCE_THRESHOLD: float = float(os.getenv("POTHOLE_CONFIDENCE_THRESHOLD", "0.20"))
+    POTHOLE_CONFIDENCE_THRESHOLD: float = float(os.getenv("POTHOLE_CONFIDENCE_THRESHOLD", "0.40"))
 
     # Model B: General Road-Defect Detector
     GENERAL_MODEL_NAME: str = "NagarSam General Road Defect Detector"
