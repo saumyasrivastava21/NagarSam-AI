@@ -80,7 +80,6 @@ export class MockReportsService implements IReportsService {
 
     // Preserve citizen observation vs AI primary defect
     const citizenIssueType = dto.issueType || 'longitudinal crack';
-    // eslint-disable-next-line prefer-const
     let aiDetection: RoadDefectDetection | undefined = dto.aiDetection;
     const aiPrimaryDefect = dto.primaryDefect || aiDetection?.primary_defect || aiDetection?.primaryDefectClass || citizenIssueType;
 

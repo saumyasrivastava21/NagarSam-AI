@@ -9,7 +9,11 @@ import { IDepartmentsService } from './contracts/departments.contract';
 import { IModelsService } from './contracts/models.contract';
 import { ISystemService } from './contracts/system.contract';
 
-// Mock implementations
+// Real FastAPI implementations
+import { apiReportsService } from './api/reports.api.service';
+import { apiAnalyticsService } from './api/analytics.api.service';
+
+// Mock implementations for secondary offline fallback / testing
 import { mockAuthService } from './mock/mockAuth.service';
 import { mockReportsService } from './mock/mockReports.service';
 import { mockIncidentsService } from './mock/mockIncidents.service';
@@ -21,19 +25,19 @@ import { mockDepartmentsService } from './mock/mockDepartments.service';
 import { mockModelsService } from './mock/mockModels.service';
 import { mockSystemService } from './mock/mockSystem.service';
 
-const API_MODE = import.meta.env.VITE_API_MODE || 'mock';
+const API_MODE = import.meta.env.VITE_API_MODE || 'production';
 
-// In Phase 1, we use the Mock Service Layer. In Phase 2, production FastAPI clients satisfying the same contracts are selected.
-export const authService: IAuthService = API_MODE === 'mock' ? mockAuthService : mockAuthService;
-export const reportsService: IReportsService = API_MODE === 'mock' ? mockReportsService : mockReportsService;
-export const incidentsService: IIncidentsService = API_MODE === 'mock' ? mockIncidentsService : mockIncidentsService;
-export const workOrdersService: IWorkOrdersService = API_MODE === 'mock' ? mockWorkOrdersService : mockWorkOrdersService;
-export const notificationsService: INotificationsService = API_MODE === 'mock' ? mockNotificationsService : mockNotificationsService;
-export const analyticsService: IAnalyticsService = API_MODE === 'mock' ? mockAnalyticsService : mockAnalyticsService;
-export const usersService: IUsersService = API_MODE === 'mock' ? mockUsersService : mockUsersService;
-export const departmentsService: IDepartmentsService = API_MODE === 'mock' ? mockDepartmentsService : mockDepartmentsService;
-export const modelsService: IModelsService = API_MODE === 'mock' ? mockModelsService : mockModelsService;
-export const systemService: ISystemService = API_MODE === 'mock' ? mockSystemService : mockSystemService;
+// In Phase 2: Live FastAPI endpoints are the primary authoritative service layer
+export const authService: IAuthService = mockAuthService;
+export const reportsService: IReportsService = API_MODE === 'mock' ? mockReportsService : apiReportsService;
+export const incidentsService: IIncidentsService = mockIncidentsService;
+export const workOrdersService: IWorkOrdersService = mockWorkOrdersService;
+export const notificationsService: INotificationsService = mockNotificationsService;
+export const analyticsService: IAnalyticsService = API_MODE === 'mock' ? mockAnalyticsService : apiAnalyticsService;
+export const usersService: IUsersService = mockUsersService;
+export const departmentsService: IDepartmentsService = mockDepartmentsService;
+export const modelsService: IModelsService = mockModelsService;
+export const systemService: ISystemService = mockSystemService;
 
 export * from './contracts/auth.contract';
 export * from './contracts/reports.contract';
