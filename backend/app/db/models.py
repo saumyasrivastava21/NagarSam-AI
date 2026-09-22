@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from sqlalchemy import (
     Column,
     String,
@@ -186,6 +186,27 @@ class Incident(Base):
     ward = relationship("Ward", back_populates="incidents")
     assigned_officer = relationship("User", back_populates="assigned_incidents", foreign_keys=[assigned_officer_id])
     work_orders = relationship("WorkOrder", back_populates="incident", cascade="all, delete-orphan")
+
+    @property
+    def public_incident_id(self) -> str:
+        return self.id
+
+    @property
+    def detected_defects(self) -> List[Any]:
+        if not self.detected_defects_json:
+            return []
+        try:
+            import json
+            data = json.loads(self.detected_defects_json)
+            if isinstance(data, list):
+                return data
+            elif isinstance(data, dict):
+                if "detections" in data and isinstance(data["detections"], list):
+                    return data["detections"]
+                return [data]
+            return []
+        except Exception:
+            return []
 
     __table_args__ = (
         Index("ix_incidents_lat_lon", "latitude", "longitude"),

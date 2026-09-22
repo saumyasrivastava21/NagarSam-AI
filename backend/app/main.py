@@ -17,6 +17,8 @@ from backend.app.api.v1.notifications import router as notifications_router
 from backend.app.api.v1.departments import router as departments_router
 from backend.app.api.v1.verifications import router as verifications_router
 from backend.app.api.v1.system import router as system_router
+from backend.app.api.v1.geo import router as geo_router
+from backend.app.api.v1.priority import router as priority_router
 from backend.app.services.inference_service import inference_service
 from backend.app.services.storage_service import storage_service, STORAGE_DIR
 from backend.app.db.database import init_db, get_db_connection
@@ -110,6 +112,8 @@ app.include_router(notifications_router, prefix=settings.API_V1_PREFIX)
 app.include_router(departments_router, prefix=settings.API_V1_PREFIX)
 app.include_router(verifications_router, prefix=settings.API_V1_PREFIX)
 app.include_router(system_router, prefix=settings.API_V1_PREFIX)
+app.include_router(geo_router, prefix=settings.API_V1_PREFIX)
+app.include_router(priority_router, prefix=settings.API_V1_PREFIX)
 
 if __name__ == "__main__":
     import uvicorn
