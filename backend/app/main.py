@@ -7,7 +7,9 @@ from fastapi.responses import FileResponse
 
 from backend.app.config import settings
 from backend.app.api.v1.ai import router as ai_router
+from backend.app.api.v1.auth import router as auth_router
 from backend.app.api.v1.reports import router as reports_router
+from backend.app.api.v1.users import router as users_router
 from backend.app.services.inference_service import inference_service
 from backend.app.services.storage_service import storage_service, STORAGE_DIR
 from backend.app.db.database import init_db, get_db_connection
@@ -91,7 +93,9 @@ async def get_analytics_summary():
 
 # Include API Routers
 app.include_router(ai_router, prefix=settings.API_V1_PREFIX)
+app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(reports_router, prefix=settings.API_V1_PREFIX)
+app.include_router(users_router, prefix=settings.API_V1_PREFIX)
 
 if __name__ == "__main__":
     import uvicorn
