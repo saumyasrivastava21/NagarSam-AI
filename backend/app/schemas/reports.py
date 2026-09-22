@@ -1,22 +1,24 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
+from datetime import datetime
 
 class ReportBase(BaseModel):
     citizen_name: Optional[str] = "Citizen Reporter"
     citizen_phone: Optional[str] = "+91 98765 43210"
     issue_type: str = "longitudinal crack"
     primary_defect: Optional[str] = None
-    description: str
+    description: str = "Road surface issue reported by citizen"
     landmark: Optional[str] = None
-    latitude: float
-    longitude: float
-    address: str
-    ward_id: str
-    ward_name: Optional[str] = None
+    latitude: float = 12.9716
+    longitude: float = 77.5946
+    address: str = "Reported Location, Ward 12"
+    ward_id: str = "W-12"
+    ward_name: Optional[str] = "Ward 12"
 
 class CreateReportRequest(ReportBase):
     image_url: Optional[str] = None
     ai_detection: Optional[Dict[str, Any]] = None
+    citizen_id: Optional[str] = None
 
 class ReportResponse(BaseModel):
     id: str
@@ -44,6 +46,9 @@ class ReportResponse(BaseModel):
     createdAt: str
     updatedAt: str
     timeline: Optional[List[Dict[str, Any]]] = None
+
+    class Config:
+        from_attributes = True
 
 class PaginatedReportsResponse(BaseModel):
     data: List[ReportResponse]
