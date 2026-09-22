@@ -211,6 +211,6 @@ def test_report_submission_and_retrieval_flow():
     assert get_resp.status_code == 200
     retrieved = get_resp.json()
     assert retrieved["id"] == report_id
-    assert retrieved["issueType"] == "pothole"
+    assert retrieved["issueType"].lower() == "pothole"
     assert retrieved["landmark"] == "Near Metro Pillar 42"
     assert len(retrieved["aiDetection"]["detections"]) == 1

@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from typing import Optional, List
 from sqlalchemy import (
     Column,
@@ -13,14 +14,24 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from backend.app.db.session import Base
+from enum import Enum
+
+class UserRole(str, Enum):
+    CITIZEN = "CITIZEN"
+    OFFICER = "OFFICER"
+    FIELD_WORKER = "FIELD_WORKER"
+    ADMIN = "ADMIN"
 
 def utc_now():
     return datetime.datetime.now(datetime.timezone.utc)
 
+def generate_uuid():
+    return str(uuid.uuid4())
+
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(String(64), primary_key=True, index=True)
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)
     full_name = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
@@ -40,7 +51,7 @@ class User(Base):
 class Department(Base):
     __tablename__ = "departments"
 
-    id = Column(String(64), primary_key=True, index=True)
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)
     name = Column(String(255), nullable=False, unique=True)
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -56,7 +67,7 @@ class Department(Base):
 class Ward(Base):
     __tablename__ = "wards"
 
-    id = Column(String(64), primary_key=True, index=True)
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)
     name = Column(String(255), nullable=False)
     code = Column(String(64), nullable=False, unique=True, index=True)
     department_id = Column(String(64), ForeignKey("departments.id"), nullable=True)
@@ -74,7 +85,7 @@ class Ward(Base):
 class ImageAsset(Base):
     __tablename__ = "image_assets"
 
-    id = Column(String(64), primary_key=True, index=True)
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)
     storage_key = Column(String(512), nullable=False)
     original_filename = Column(String(255), nullable=False)
     content_type = Column(String(64), nullable=False, default="image/jpeg")
@@ -89,7 +100,7 @@ class ImageAsset(Base):
 class InferenceResult(Base):
     __tablename__ = "inference_results"
 
-    id = Column(String(64), primary_key=True, index=True)
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)
     image_asset_id = Column(String(64), ForeignKey("image_assets.id"), nullable=True)
     request_id = Column(String(64), nullable=True)
     model_metadata_json = Column(Text, nullable=True)
@@ -104,7 +115,7 @@ class InferenceResult(Base):
 class Report(Base):
     __tablename__ = "reports"
 
-    id = Column(String(64), primary_key=True, index=True)  # e.g., NS-2026-00001
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)  # e.g., NS-2026-00001
     citizen_id = Column(String(64), ForeignKey("users.id"), nullable=False, index=True)
     citizen_name = Column(String(255), nullable=False, default="Citizen Reporter")
     citizen_phone = Column(String(32), nullable=True)
@@ -145,7 +156,7 @@ class Report(Base):
 class Incident(Base):
     __tablename__ = "incidents"
 
-    id = Column(String(64), primary_key=True, index=True)  # e.g., INC-NS-2026-00001
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)  # e.g., INC-NS-2026-00001
     report_id = Column(String(64), ForeignKey("reports.id"), nullable=False, unique=True, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
@@ -185,7 +196,7 @@ class Incident(Base):
 class WorkOrder(Base):
     __tablename__ = "work_orders"
 
-    id = Column(String(64), primary_key=True, index=True)  # e.g., WO-2026-00001
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)  # e.g., WO-2026-00001
     incident_id = Column(String(64), ForeignKey("incidents.id"), nullable=False, index=True)
     report_id = Column(String(64), ForeignKey("reports.id"), nullable=True)
     title = Column(String(255), nullable=False)
@@ -221,10 +232,12 @@ class WorkOrder(Base):
 class Verification(Base):
     __tablename__ = "verifications"
 
-    id = Column(String(64), primary_key=True, index=True)  # e.g., VER-00001
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)  # e.g., VER-00001
     work_order_id = Column(String(64), ForeignKey("work_orders.id"), nullable=False, unique=True, index=True)
     before_photo_url = Column(String(512), nullable=True)
     after_photo_url = Column(String(512), nullable=True)
+    before_image_asset_id = Column(String(64), ForeignKey("image_assets.id"), nullable=True)
+    after_image_asset_id = Column(String(64), ForeignKey("image_assets.id"), nullable=True)
     inference_result_id = Column(String(64), ForeignKey("inference_results.id"), nullable=True)
     ai_verification_score = Column(Float, nullable=True)
     ai_verification_result_json = Column(Text, nullable=True)
@@ -242,7 +255,7 @@ class Verification(Base):
 class Notification(Base):
     __tablename__ = "notifications"
 
-    id = Column(String(64), primary_key=True, index=True)
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)
     user_id = Column(String(64), ForeignKey("users.id"), nullable=False, index=True)
     type = Column(String(32), nullable=False, default="INFO")  # INFO, STATUS_UPDATE, ASSIGNMENT, VERIFICATION, ALERT
     title = Column(String(255), nullable=False)
@@ -261,7 +274,7 @@ class Notification(Base):
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
-    id = Column(String(64), primary_key=True, index=True)
+    id = Column(String(64), primary_key=True, default=generate_uuid, index=True)
     actor_id = Column(String(64), ForeignKey("users.id"), nullable=True, index=True)
     actor_role = Column(String(32), nullable=True)
     actor_name = Column(String(255), nullable=True)

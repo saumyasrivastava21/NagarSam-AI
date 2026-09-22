@@ -81,11 +81,15 @@ async def get_optional_current_user(
 
 def require_role(*allowed_roles: str) -> Callable:
     """Role-Based Access Control (RBAC) dependency factory."""
+    str_roles = [r.value if hasattr(r, 'value') else str(r) for r in allowed_roles]
     async def role_checker(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role not in allowed_roles and current_user.role != "ADMIN":
+        user_role = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+        if user_role not in str_roles and user_role != "ADMIN":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access forbidden: role '{current_user.role}' lacks required permissions ({', '.join(allowed_roles)}).",
+                detail=f"Access forbidden: role '{user_role}' lacks required permissions ({', '.join(str_roles)}).",
             )
         return current_user
     return role_checker
+
+require_roles = require_role

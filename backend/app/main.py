@@ -13,6 +13,10 @@ from backend.app.api.v1.incidents import router as incidents_router
 from backend.app.api.v1.work_orders import router as work_orders_router
 from backend.app.api.v1.audit import router as audit_router
 from backend.app.api.v1.users import router as users_router
+from backend.app.api.v1.notifications import router as notifications_router
+from backend.app.api.v1.departments import router as departments_router
+from backend.app.api.v1.verifications import router as verifications_router
+from backend.app.api.v1.system import router as system_router
 from backend.app.services.inference_service import inference_service
 from backend.app.services.storage_service import storage_service, STORAGE_DIR
 from backend.app.db.database import init_db, get_db_connection
@@ -102,6 +106,10 @@ app.include_router(incidents_router, prefix=settings.API_V1_PREFIX)
 app.include_router(work_orders_router, prefix=settings.API_V1_PREFIX)
 app.include_router(audit_router, prefix=settings.API_V1_PREFIX)
 app.include_router(users_router, prefix=settings.API_V1_PREFIX)
+app.include_router(notifications_router, prefix=settings.API_V1_PREFIX)
+app.include_router(departments_router, prefix=settings.API_V1_PREFIX)
+app.include_router(verifications_router, prefix=settings.API_V1_PREFIX)
+app.include_router(system_router, prefix=settings.API_V1_PREFIX)
 
 if __name__ == "__main__":
     import uvicorn
