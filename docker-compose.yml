@@ -1,34 +1,76 @@
 version: '3.8'
 
 services:
-  ai-inference-service:
+  postgres:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: nagarsam-postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nagarsam_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nagarsam_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nagarsam-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend-api:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: nagarsam-ai-inference
+    container_name: nagarsam-backend-api
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - MODEL_PATH=./models/nagrik OS initial.pt
-      - MODEL_VERSION=RDD2022-YOLO11m-v1
+      - DATABASE_URL=postgresql+psycopg://postgres:postgrespassword@postgres:5432/nagarsam_db
+      - USE_POSTGIS=true
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=production-secure-jwt-key-for-docker-local
+      - OBJECT_STORAGE_PROVIDER=local
+      - LOCAL_STORAGE_PATH=/app/storage/uploads
+      - POTHOLE_MODEL_PATH=/app/models/pothole_best.pt
+      - GENERAL_MODEL_PATH=/app/models/nagrik OS initial.pt
       - MODEL_DEVICE=cpu
       - MODEL_IMAGE_SIZE=640
-      - MODEL_CONFIDENCE_THRESHOLD=0.25
-      - MODEL_IOU_THRESHOLD=0.45
       - MAX_IMAGE_SIZE_MB=10
       - INFERENCE_TIMEOUT_SECONDS=60
-      - MAX_CONCURRENT_INFERENCES=4
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
       - HOST=0.0.0.0
       - PORT=8000
     volumes:
       - ./models:/app/models:ro
+      - backend_uploads:/app/storage/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/ai/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/system/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 20s
 
   frontend:
     build:
@@ -42,5 +84,10 @@ services:
       - VITE_API_MODE=production
       - VITE_API_BASE_URL=http://localhost:8000/api/v1
     depends_on:
-      ai-inference-service:
+      backend-api:
         condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:

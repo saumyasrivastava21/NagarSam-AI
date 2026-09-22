@@ -9,40 +9,81 @@
 
 **NagarSam AI** (derived from *Nagar* [City] + *Sam* [Collective Civic Action]) is a production-grade, AI-assisted civic infrastructure platform designed to bridge citizen road defect reporting with verifiable municipal road repair workflows.
 
-The repository is structured to support multiple microservices:
-- `frontend/`: Complete React 18 + TypeScript 5 web application
-- `backend/`: (Phase 2) FastAPI, PostgreSQL/PostGIS, Redis, and LangGraph agents
-- `ml/`: (Phase 2) RDD2022 YOLO inference workers
-
-### Key Platform Capabilities:
-- **Multi-Class Road Defect Detection**: Longitudinal cracks, transverse cracks, alligator cracks, road surface corruption, and potholes.
-- **Four Dedicated Role Workspaces**: Citizen, Municipal Officer, Field Worker, and System Administrator.
-- **Voice & Accessibility**: Web Speech API integration (`VoiceInputButton`), WCAG-compliant contrast, and full Light/Dark/System theme toggling.
-- **Explainable AI Detection Interface**: RDD2022 computer vision boundary visualization with sub-100ms inference metrics and multi-factor priority reasoning.
-- **Bilingual Support**: Instant reactive Hindi + English localization.
-- **Synchronized Cross-Role State Engine**: Actions taken by a citizen immediately propagate to officer triage queues, dispatch to worker mobile consoles, and update citizen tracking status upon post-repair verification.
+The repository includes:
+- `backend/`: Production FastAPI application, PostgreSQL/PostGIS persistence, Alembic migrations, Redis caching, dual-YOLO inference engine, Geospatial Intelligence, Deterministic Priority Engine, and JWT RBAC authentication.
+- `frontend/`: React 18 + TypeScript 5 web application with dedicated Citizen, Officer, Field Worker, and Admin workspaces, Leaflet GIS mapping, real-time audio input, and TanStack Query state synchronization.
+- `models/`: Dual-YOLO checkpoint models:
+  - `pothole_best.pt` (Specialized Pothole Detector)
+  - `nagrik OS initial.pt` (General Multi-Class Road Defect Detector)
+- `docs/`: Architecture documentation and AWS deployment guides.
 
 ---
 
-## 🛠️ Technology Stack (`frontend/`)
+## 🛠️ Complete Technology Stack
 
 | Domain | Technology |
 | :--- | :--- |
-| **Framework & Core** | React 18 / TypeScript 5 (Strict Mode) / Vite 6 |
-| **Routing** | React Router v6 (SPA with deep-link rewrites) |
-| **Styling & Design System** | Tailwind CSS (Semantic Civic Tokens) / Dark & Light Modes |
-| **State Management** | TanStack Query v5 (Server-state caching) / Zustand v5 (Auth & UI) |
-| **Voice Accessibility** | Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`) |
-| **Forms & Validation** | React Hook Form + Zod |
-| **GIS & Geospatial Mapping** | Leaflet / React-Leaflet |
-| **Data Visualization** | Recharts (Area, Pie, and Bar charts) |
-| **Icons & Micro-Interactions** | Lucide React / Framer Motion / Sonner Toast Notifications |
-| **Testing** | Vitest / React Testing Library / jsdom |
-| **Containerization** | Docker (Alpine Multi-Stage Build) / Nginx |
+| **Backend Framework** | FastAPI (Python 3.11/3.13), Pydantic v2, Uvicorn |
+| **Database & ORM** | PostgreSQL 15+ with PostGIS, SQLAlchemy 2.0 (Async/Sync), Alembic Migrations |
+| **AI / Computer Vision** | Ultralytics YOLO11, PyTorch, OpenCV, Dual Checkpoint Orchestration |
+| **Caching & Job Queue** | Redis 7, Celery / Background Task Processing |
+| **Authentication & Security**| JWT (Access/Refresh Tokens), Passlib (Bcrypt), Role-Based Access Control (RBAC) |
+| **Storage Abstraction** | Local filesystem storage (Dev) & Amazon S3 Private Bucket with Presigned URLs (Prod) |
+| **Frontend Framework** | React 18, TypeScript 5 (Strict Mode), Vite 6 |
+| **GIS & Geospatial Mapping** | Leaflet / React-Leaflet, PostGIS ST_DWithin / ST_Contains |
+| **State Management** | TanStack Query v5, Zustand v5 |
+| **Testing** | Pytest (27 tests), Vitest (16 tests), React Testing Library |
+| **Containerization** | Docker, Docker Compose (Multi-Service Stack) |
 
 ---
 
-## 🚀 Running the Frontend
+## 🔄 End-to-End Civic Lifecycle (Phases 3, 4 & 5)
+
+```
+Citizen
+   ↓ (Upload road defect photo + GPS)
+Dual-YOLO Inference Service
+   ↓ (Pothole + Multi-Class Defect Detection)
+Citizen Reviews AI Results & Submits
+   ↓ (Persisted in PostgreSQL + Idempotency)
+Incident Created & Spatial Analysis
+   ↓ (Nearby Search, Duplicate Candidates, Ward Routing, Priority Engine)
+Officer Reviews Incident
+   ↓ (Confirm / Reject with Reason & Audit Logging)
+Work Order Dispatched
+   ↓ (Assigned to Field Worker)
+Field Worker Accepts & Repairs Road
+   ↓ (Starts repair, uploads After-Repair photo)
+AI-Assisted Verification
+   ↓ (Inference on repair photo confirms remediation)
+Officer Approves Resolution
+   ↓ (Signs off on verified repair)
+Citizen Receives Notification
+   ↓ (All records synchronized to RESOLVED)
+```
+
+---
+
+## 🚀 Running Locally
+
+### 1. Backend Setup
+
+```bash
+# Activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Or on Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run database migrations
+alembic upgrade head
+
+# Start FastAPI development server
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 2. Frontend Setup
 
 ```bash
 cd frontend
@@ -50,134 +91,50 @@ npm install
 npm run dev
 ```
 
-App runs on **`http://localhost:3000/`**.
+App runs on `http://localhost:3000/` or `http://localhost:5173/`.
 
-## 🔄 End-to-End Cross-Role Workflow
+### 3. Docker Compose (Full Stack with PostGIS & Redis)
 
+```bash
+docker-compose up --build -d
 ```
-[Citizen] Upload Photo + GPS Coordinates
-   ↓
-[RDD2022 AI] Generates Bounding Box & 94% Confidence Score
-   ↓
-[AI Reasoning] Evaluates Traffic Density, Cavity Area & Corridor Weighting (P0 to P3)
-   ↓
-[Municipal Officer] Triages Queue, Confirms Severity, Dispatches Work Order
-   ↓
-[Field Worker] Acknowledges Job outdoors, Commences Asphalt Patching
-   ↓
-[Field Worker] Submits Post-Repair Photo for AI Verification
-   ↓
-[VerifyNet-v1] Scores Defect Elimination (93% Score)
-   ↓
-[Municipal Officer] Confirms Resolution & Signs Off
-   ↓
-[Citizen] Receives Verified Notification & Live Closure Update
-```
+
+Services:
+- **Frontend**: `http://localhost:3000`
+- **Backend API**: `http://localhost:8000/api/v1`
+- **API Documentation**: `http://localhost:8000/docs`
+- **PostgreSQL / PostGIS**: `localhost:5432`
+- **Redis**: `localhost:6379`
 
 ---
 
-## 🚀 Getting Started Locally
+## 🧪 Testing & Quality Gates
 
-### Prerequisites
-- **Node.js**: v18.0.0 or higher (v22 recommended)
-- **npm**: v9.0.0 or higher
-
-### 1. Installation
+### Backend Test Suite (Pytest)
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd "NagarSam AI"
-
-# Install dependencies
-npm install
+pytest backend/tests/ -v
 ```
+*Coverage includes Auth API, Reports API, Incident Triage, Work Orders, Verifications, Notifications, PostGIS Spatial queries, Deterministic Priority Engine, and the complete cross-role E2E workflow.*
 
-### 2. Environment Setup
-Create a `.env` file from the example:
+### Frontend Test Suite (Vitest & TypeScript)
 ```bash
-cp .env.example .env
-```
-Default parameters in `.env`:
-```ini
-VITE_API_MODE=mock
-VITE_API_BASE_URL=http://localhost:8000/api/v1
-```
-
-### 3. Run Development Server
-```bash
-npm run dev
-```
-Open `http://localhost:3000` in your browser.
-
----
-
-## 🧪 Quality Assurance & Testing
-
-```bash
-# Run TypeScript strict typecheck
+cd frontend
 npm run typecheck
-
-# Run ESLint validation
-npm run lint
-
-# Run automated unit and integration tests
 npm run test
-
-# Production build bundle check
 npm run build
 ```
 
 ---
 
-## 🐳 Docker Deployment
+## 🛡️ Security & Roles (RBAC)
 
-A multi-stage `Dockerfile` compiles the TypeScript assets and serves the bundle through a hardened, gzip-compressed Nginx instance with SPA route fallbacks.
-
-```bash
-# Build Docker image
-docker build -t nagarsam-ai-frontend .
-
-# Run Docker container on port 8080
-docker run -d -p 8080:80 --name nagarsam-app nagarsam-ai-frontend
-```
-Access the application at `http://localhost:8080`.
+1. **CITIZEN**: Create reports, view own reports and notifications.
+2. **OFFICER**: Review incidents, confirm/reject, assign work orders, review verification evidence, approve resolution.
+3. **FIELD_WORKER**: View assigned work orders, accept jobs, upload after-repair photos, submit for verification.
+4. **ADMIN**: Manage users, departments, wards, model registry, and audit logs.
 
 ---
 
-## ☁️ Cloud Deployment Guides
+## 📖 Deployment & Production Architecture
 
-### Vercel Deployment
-1. Connect your GitHub repository to Vercel.
-2. The bundled `vercel.json` automatically configures SPA routing and security headers.
-3. Build Command: `npm run build`
-4. Output Directory: `dist`
-
-### AWS S3 + CloudFront Deployment
-1. Build the production distribution:
-   ```bash
-   npm run build
-   ```
-2. Upload the `dist/` directory to an AWS S3 Bucket configured for static website hosting.
-3. Attach an Amazon CloudFront distribution pointing to the S3 origin.
-4. Set CloudFront Custom Error Response:
-   - **HTTP Error Code**: `404`
-   - **Response Page Path**: `/index.html`
-   - **HTTP Response Code**: `200 OK`
-
----
-
-## 🔑 Demo Personas
-
-Use the **Floating Demo Role Switcher** in the bottom-right corner or the login quick-fill buttons:
-
-| Persona | Demo Email | Primary Responsibilities |
-| :--- | :--- | :--- |
-| **Citizen** | `citizen@example.com` | Report road defects, 4-step wizard, track lifecycle timeline |
-| **Municipal Officer** | `officer@example.com` | Triage incident queue, inspect AI reasoning, dispatch work orders |
-| **Field Worker** | `worker@example.com` | Outdoor mobile view, accept jobs, upload after-repair photos |
-| **System Admin** | `admin@example.com` | Model candidate registry, AI threshold sliders, audit logs |
-
----
-
-## 📄 License & Disclaimer
-NagarSam AI is an AI-powered civic technology platform created for research and municipal operational excellence. Phase 1 operates in evaluation mock mode with realistic Lucknow geographic scenarios.
+See [`docs/deployment_guide.md`](docs/deployment_guide.md) for full AWS infrastructure blueprints including RDS PostgreSQL + PostGIS, Private S3, Amazon ECR/ECS Fargate, and CloudFront.
