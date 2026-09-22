@@ -214,6 +214,19 @@ async def get_work_orders(
         "totalPages": total_pages,
     }
 
+@router.get("/my-assignments")
+async def get_my_assigned_work_orders(
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Fetches work orders assigned to the currently authenticated field worker."""
+    query = db.query(WorkOrder).filter(WorkOrder.assigned_worker_id == current_user.id)
+    if status:
+        query = query.filter(WorkOrder.status == status.upper())
+    orders = query.order_by(desc(WorkOrder.created_at)).all()
+    return [_format_work_order_dict(wo) for wo in orders]
+
 @router.get("/{work_order_id}", response_model=WorkOrderResponse)
 async def get_work_order_by_id(work_order_id: str, db: Session = Depends(get_db)):
     """Fetches single work order with full lifecycle details and verification data."""

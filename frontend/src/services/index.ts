@@ -14,8 +14,8 @@ import { apiAuthService } from './api/auth.api.service';
 import { apiReportsService } from './api/reports.api.service';
 import { ApiAnalyticsService } from './api/analytics.api.service';
 import { apiUsersService } from './api/users.api.service';
-import { ApiIncidentsService } from './api/incidents.api.service';
-import { ApiWorkOrdersService } from './api/workOrders.api.service';
+import { apiIncidentsService } from './api/incidents.api.service';
+import { apiWorkOrdersService } from './api/workOrders.api.service';
 import { ApiNotificationsService } from './api/notifications.api.service';
 import { ApiDepartmentsService } from './api/departments.api.service';
 import { ApiModelsService } from './api/models.api.service';
@@ -35,8 +35,7 @@ import { mockSystemService } from './mock/mockSystem.service';
 
 const API_MODE = import.meta.env.VITE_API_MODE || 'production';
 
-export const apiIncidentsService = new ApiIncidentsService();
-export const apiWorkOrdersService = new ApiWorkOrdersService();
+export { apiIncidentsService, apiWorkOrdersService };
 export const apiNotificationsService = new ApiNotificationsService();
 export const apiAnalyticsService = new ApiAnalyticsService();
 export const apiDepartmentsService = new ApiDepartmentsService();

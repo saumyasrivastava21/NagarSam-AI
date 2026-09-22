@@ -14,7 +14,7 @@ export class ApiNotificationsService implements INotificationsService {
     return res.data;
   }
 
-  async markAllAsRead(userId?: string): Promise<void> {
+  async markAllAsRead(_userId?: string): Promise<void> {
     await apiClient.post('/notifications/mark-all-read');
   }
 }
