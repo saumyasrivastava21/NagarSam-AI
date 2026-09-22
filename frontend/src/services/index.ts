@@ -14,6 +14,7 @@ import { apiAuthService } from './api/auth.api.service';
 import { apiReportsService } from './api/reports.api.service';
 import { apiAnalyticsService } from './api/analytics.api.service';
 import { apiUsersService } from './api/users.api.service';
+import { apiIncidentsService } from './api/incidents.api.service';
 
 // Mock implementations for secondary offline fallback / testing
 import { mockAuthService } from './mock/mockAuth.service';
@@ -31,7 +32,7 @@ const API_MODE = import.meta.env.VITE_API_MODE || 'production';
 
 export const authService: IAuthService = API_MODE === 'mock' ? mockAuthService : apiAuthService;
 export const reportsService: IReportsService = API_MODE === 'mock' ? mockReportsService : apiReportsService;
-export const incidentsService: IIncidentsService = mockIncidentsService;
+export const incidentsService: IIncidentsService = API_MODE === 'mock' ? mockIncidentsService : apiIncidentsService;
 export const workOrdersService: IWorkOrdersService = mockWorkOrdersService;
 export const notificationsService: INotificationsService = mockNotificationsService;
 export const analyticsService: IAnalyticsService = API_MODE === 'mock' ? mockAnalyticsService : apiAnalyticsService;

@@ -9,6 +9,8 @@ from backend.app.config import settings
 from backend.app.api.v1.ai import router as ai_router
 from backend.app.api.v1.auth import router as auth_router
 from backend.app.api.v1.reports import router as reports_router
+from backend.app.api.v1.incidents import router as incidents_router
+from backend.app.api.v1.audit import router as audit_router
 from backend.app.api.v1.users import router as users_router
 from backend.app.services.inference_service import inference_service
 from backend.app.services.storage_service import storage_service, STORAGE_DIR
@@ -95,6 +97,8 @@ async def get_analytics_summary():
 app.include_router(ai_router, prefix=settings.API_V1_PREFIX)
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(reports_router, prefix=settings.API_V1_PREFIX)
+app.include_router(incidents_router, prefix=settings.API_V1_PREFIX)
+app.include_router(audit_router, prefix=settings.API_V1_PREFIX)
 app.include_router(users_router, prefix=settings.API_V1_PREFIX)
 
 if __name__ == "__main__":
